@@ -17,6 +17,7 @@
     "seed": "knex seed:run"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.50.0",
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.5.0",
     "jsonwebtoken": "^9.0.2",
