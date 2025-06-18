@@ -1,0 +1,48 @@
+{
+  "name": "swapdeals",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "setup-admin": "node scripts/setup-admin.js",
+    "setup-admin:first": "node scripts/setup-admin.js --first",
+    "generate-admin-key": "node -e \"console.log('ADMIN_SETUP_KEY=' + require('crypto').randomBytes(32).toString('hex'))\"",
+    "generate-first-token": "node -e \"console.log('FIRST_SETUP_TOKEN=' + require('crypto').randomBytes(32).toString('hex'))\"",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "migrate": "knex migrate:latest",
+    "migrate:rollback": "knex migrate:rollback",
+    "migrate:make": "knex migrate:make",
+    "seed": "knex seed:run"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.5.0",
+    "jsonwebtoken": "^9.0.2",
+    "knex": "^2.5.1",
+    "lucide-react": "^0.263.1",
+    "next": "^15.3.3",
+    "next-auth": "^4.24.11",
+    "pg": "^8.16.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "sharp": "^0.34.2",
+    "uuid": "^11.1.0",
+    "yup": "^1.6.1",
+    "zod": "^3.25.20"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "cross-env": "^7.0.3",
+    "eslint": "^9.29.0",
+    "eslint-config-next": "^15.3.3",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.3"
+  }
+}
