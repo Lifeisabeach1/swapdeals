@@ -21,7 +21,7 @@
     "dotenv": "^16.5.0",
     "jsonwebtoken": "^9.0.2",
     "knex": "^2.5.1",
-    "lucide-react": "^0.263.1",
+    "lucide-react": "^0.517.0",
     "next": "^15.3.3",
     "next-auth": "^4.24.11",
     "pg": "^8.16.0",
