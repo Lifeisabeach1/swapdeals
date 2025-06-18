@@ -1,15 +1,15 @@
-// src/lib/db/index.js
+// src/lib/db/index.js  
 import knex from 'knex';
 
 const knexConfig = {
   client: 'postgresql',
   connection: process.env.DATABASE_URL || {
-    host: process.env.DB_HOST || 'aws-0-eu-north-1.pooler.supabase.com',
-    port: process.env.DB_PORT || 6543,
-    user: process.env.DB_USER || 'postgres.mghbexawntwdktpkmubp',
+    host: process.env.DB_HOST,
+    port: parseInt(process.env.DB_PORT) || 6543,
+    user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME || 'postgres',
-    ssl: { rejectUnauthorized: false } // Add this line
+    ssl: { rejectUnauthorized: false }
   },
   pool: {
     min: 2,
