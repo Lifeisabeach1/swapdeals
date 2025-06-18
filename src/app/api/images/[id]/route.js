@@ -1,12 +1,10 @@
-// app/api/images/[id]/route.js
+// src/app/api/images/[id]/route.js
 import { NextResponse } from 'next/server';
-import { readFile } from 'fs/promises';
-import path from 'path';
 import { knex } from '@/lib/db/index.js';
 
 export async function GET(request, { params }) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     // Get image metadata from database
     const image = await knex('images')
@@ -21,19 +19,30 @@ export async function GET(request, { params }) {
       );
     }
 
-    // Read actual image file from filesystem
-    const filePath = path.join(process.cwd(), 'public', image.file_path);
-    const imageBuffer = await readFile(filePath);
+    // Since we're using Supabase Storage with public URLs,
+    // we can just redirect to the public URL or return the metadata
+    
+    // Option 1: Redirect to the public URL
+    return NextResponse.redirect(image.url);
 
-    // Return the image binary data
-    return new NextResponse(imageBuffer, {
-      status: 200,
-      headers: {
-        'Content-Type': image.mime_type,
-        'Content-Length': image.file_size.toString(),
-        'Cache-Control': 'public, max-age=31536000, immutable',
-      },
+    // Option 2: Return image metadata (uncomment if you prefer this)
+    /*
+    return NextResponse.json({
+      success: true,
+      image: {
+        id: image.id,
+        filename: image.filename,
+        url: image.url,
+        originalName: image.original_name,
+        rotation: image.rotation || 0,
+        width: image.processed_width || image.original_width,
+        height: image.processed_height || image.original_height,
+        mimeType: image.mime_type,
+        fileSize: image.file_size,
+        createdAt: image.created_at
+      }
     });
+    */
 
   } catch (error) {
     console.error('Image fetch error:', error);

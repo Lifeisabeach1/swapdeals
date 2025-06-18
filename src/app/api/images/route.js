@@ -1,9 +1,8 @@
 // src/app/api/images/route.js
 import { NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
 import jwt from 'jsonwebtoken';
 import { knex } from '@/lib/db/index.js';
+import { supabaseAdmin } from '@/lib/supabase.js';
 import sharp from 'sharp';
 
 // Add OPTIONS handler for CORS
@@ -92,18 +91,7 @@ export async function POST(request) {
     }
 
     const uploadedImages = [];
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-    
-    // Create uploads directory if it doesn't exist
-    try {
-      await mkdir(uploadsDir, { recursive: true });
-    } catch (mkdirError) {
-      console.error('Failed to create uploads directory:', mkdirError);
-      return NextResponse.json({ 
-        success: false, 
-        message: 'Server storage error' 
-      }, { status: 500 });
-    }
+    const bucketName = process.env.SUPABASE_STORAGE_BUCKET || 'images';
 
     // Process each file
     for (let i = 0; i < files.length; i++) {
@@ -141,9 +129,8 @@ export async function POST(request) {
       // Generate unique filename
       const timestamp = Date.now();
       const randomString = Math.random().toString(36).substring(2, 15);
-      const extension = path.extname(file.name);
-      const filename = `${timestamp}-${randomString}${extension}`;
-      const filepath = path.join(uploadsDir, filename);
+      const extension = path.extname(file.name) || '.jpg';
+      const filename = `${userId}/${timestamp}-${randomString}${extension}`;
 
       try {
         // Process image with Sharp
@@ -168,10 +155,27 @@ export async function POST(request) {
         const processedBuffer = await sharpInstance.toBuffer();
         const metadata = await sharp(buffer).metadata();
 
-        // Save processed file
-        await writeFile(filepath, processedBuffer);
+        // Upload to Supabase Storage
+        const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+          .from(bucketName)
+          .upload(filename, processedBuffer, {
+            contentType: file.type,
+            cacheControl: '31536000', // 1 year
+            upsert: false
+          });
 
-        const urlPath = `/uploads/${filename}`;
+        if (uploadError) {
+          console.error('Supabase upload error:', uploadError);
+          return NextResponse.json({ 
+            success: false, 
+            message: `Failed to upload ${file.name}: ${uploadError.message}` 
+          }, { status: 500 });
+        }
+
+        // Get public URL
+        const { data: { publicUrl } } = supabaseAdmin.storage
+          .from(bucketName)
+          .getPublicUrl(filename);
 
         // Save to database with error handling
         let imageRecord;
@@ -179,10 +183,10 @@ export async function POST(request) {
           [imageRecord] = await knex('images')
             .insert({
               user_id: userId,
-              filename: filename,
+              filename: filename.split('/').pop(), // Just the filename without path
               original_name: file.name,
-              file_path: urlPath,
-              url: urlPath,
+              file_path: filename, // Full path in Supabase
+              url: publicUrl,
               file_size: processedBuffer.length,
               mime_type: file.type,
               rotation: rotation,
@@ -190,11 +194,18 @@ export async function POST(request) {
               original_height: metadata.height,
               processed_width: rotation === 90 || rotation === 270 ? metadata.height : metadata.width,
               processed_height: rotation === 90 || rotation === 270 ? metadata.width : metadata.height,
+              storage_provider: 'supabase',
               listing_id: null
             })
             .returning(['id', 'filename', 'url', 'rotation']);
         } catch (dbError) {
           console.error('Database insert error:', dbError);
+          
+          // Clean up uploaded file if database insert fails
+          await supabaseAdmin.storage
+            .from(bucketName)
+            .remove([filename]);
+            
           return NextResponse.json({ 
             success: false, 
             message: 'Database error while saving image' 
@@ -319,16 +330,17 @@ export async function DELETE(request) {
       }, { status: 404 });
     }
 
-    // Delete from database
+    // Delete from database first
     await knex('images').where('id', imageId).del();
 
-    // Delete file from filesystem
-    try {
-      const { unlink } = await import('fs/promises');
-      const filepath = path.join(process.cwd(), 'public', image.file_path);
-      await unlink(filepath);
-    } catch (fileError) {
-      console.warn('Could not delete file:', fileError.message);
+    // Delete from Supabase Storage
+    const bucketName = process.env.SUPABASE_STORAGE_BUCKET || 'images';
+    const { error: deleteError } = await supabaseAdmin.storage
+      .from(bucketName)
+      .remove([image.file_path]);
+
+    if (deleteError) {
+      console.warn('Could not delete file from Supabase:', deleteError.message);
     }
 
     return NextResponse.json({
