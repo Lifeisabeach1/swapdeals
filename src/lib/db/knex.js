@@ -1,43 +1,23 @@
-//lib/db/knex
-const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.local';
-require('dotenv').config({ path: envFile });
+import knex from 'knex';
 
-module.exports = {
-  development: {
-    client: 'postgresql',
-    connection: {
-      host: process.env.DB_HOST,
-      port: parseInt(process.env.DB_PORT),
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME,
-      ssl: { rejectUnauthorized: false }
-    },
-    migrations: {
-      directory: './src/lib/db/migrations'
-    },
-    seeds: {
-      directory: './src/lib/db/seeds'
-    },
-    pool: { min: 2, max: 10 }
+const db = knex({
+  client: 'postgresql',
+  connection: {
+    host: process.env.DB_HOST,
+    port: parseInt(process.env.DB_PORT) || 6543,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    ssl: { rejectUnauthorized: false }
   },
-  
-  production: {
-    client: 'postgresql',
-    connection: process.env.DATABASE_URL || {
-      host: process.env.DB_HOST,
-      port: parseInt(process.env.DB_PORT),
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME,
-      ssl: { rejectUnauthorized: false }
-    },
-    migrations: {
-      directory: './src/lib/db/migrations'
-    },
-    seeds: {
-      directory: './src/lib/db/seeds'
-    },
-    pool: { min: 2, max: 20 }
+  pool: {
+    min: 2,
+    max: 10
+  },
+  acquireConnectionTimeout: 60000,
+  migrations: {
+    tableName: 'knex_migrations'
   }
-};
+});
+
+export default db;
