@@ -1,10 +1,10 @@
 // src/app/api/images/[id]/rotate/route.js
 import { NextResponse } from 'next/server';
-import { writeFile } from 'fs/promises';
-import path from 'path';
 import jwt from 'jsonwebtoken';
 import { knex } from '@/lib/db/index.js';
+import { supabase } from '@/lib/supabase.js';
 import sharp from 'sharp';
+import path from 'path';
 
 export async function POST(request, { params }) {
   try {
@@ -76,12 +76,27 @@ export async function POST(request, { params }) {
       }, { status: 404 });
     }
 
-    // Read the current image file
-    const currentFilePath = path.join(process.cwd(), 'public', image.file_path);
+    const bucketName = process.env.SUPABASE_STORAGE_BUCKET || 'images';
     
     try {
+      // Download the current image from Supabase
+      const { data: imageData, error: downloadError } = await supabase.storage
+        .from(bucketName)
+        .download(image.file_path);
+
+      if (downloadError) {
+        console.error('Download error:', downloadError);
+        return NextResponse.json({
+          success: false,
+          message: 'Failed to download image for rotation'
+        }, { status: 500 });
+      }
+
+      // Convert blob to buffer
+      const imageBuffer = Buffer.from(await imageData.arrayBuffer());
+      
       // Process the image with the new rotation
-      let sharpInstance = sharp(currentFilePath);
+      let sharpInstance = sharp(imageBuffer);
       
       // Apply the rotation
       if (rotation > 0) {
@@ -103,12 +118,29 @@ export async function POST(request, { params }) {
       const timestamp = Date.now();
       const randomString = Math.random().toString(36).substring(2, 15);
       const extension = path.extname(image.filename);
-      const newFilename = `${timestamp}-${randomString}${extension}`;
-      const newFilePath = path.join(process.cwd(), 'public', 'uploads', newFilename);
-      const newUrlPath = `/uploads/${newFilename}`;
+      const newFilename = `${userId}/${timestamp}-${randomString}${extension}`;
 
-      // Save the rotated image
-      await writeFile(newFilePath, processedBuffer);
+      // Upload the rotated image to Supabase
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from(bucketName)
+        .upload(newFilename, processedBuffer, {
+          contentType: image.mime_type,
+          cacheControl: '31536000', // 1 year
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        return NextResponse.json({
+          success: false,
+          message: 'Failed to upload rotated image'
+        }, { status: 500 });
+      }
+
+      // Get new public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from(bucketName)
+        .getPublicUrl(newFilename);
 
       // Calculate new dimensions based on rotation
       const currentRotation = image.rotation || 0;
@@ -129,9 +161,9 @@ export async function POST(request, { params }) {
       await knex('images')
         .where('id', imageId)
         .update({
-          filename: newFilename,
-          file_path: newUrlPath,
-          url: newUrlPath,
+          filename: newFilename.split('/').pop(),
+          file_path: newFilename,
+          url: publicUrl,
           file_size: processedBuffer.length,
           rotation: totalRotation,
           processed_width: newWidth,
@@ -139,10 +171,15 @@ export async function POST(request, { params }) {
           updated_at: knex.fn.now()
         });
 
-      // Clean up the old file (optional, you might want to keep it for backup)
+      // Clean up the old file from Supabase
       try {
-        const { unlink } = await import('fs/promises');
-        await unlink(currentFilePath);
+        const { error: deleteError } = await supabase.storage
+          .from(bucketName)
+          .remove([image.file_path]);
+        
+        if (deleteError) {
+          console.warn('Could not delete old file from Supabase:', deleteError.message);
+        }
       } catch (cleanupError) {
         console.warn('Could not delete old file:', cleanupError.message);
       }

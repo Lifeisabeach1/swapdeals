@@ -2,8 +2,9 @@
 import { NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 import { knex } from '@/lib/db/index.js';
-import { supabaseAdmin } from '@/lib/supabase.js';
+import { supabase } from '@/lib/supabase.js';
 import sharp from 'sharp';
+import path from 'path';
 
 // Add OPTIONS handler for CORS
 export async function OPTIONS(request) {
@@ -22,6 +23,14 @@ export async function POST(request) {
     // Add error handling for missing environment variables
     if (!process.env.JWT_SECRET) {
       console.error('JWT_SECRET environment variable is not set');
+      return NextResponse.json({ 
+        success: false, 
+        message: 'Server configuration error' 
+      }, { status: 500 });
+    }
+
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      console.error('Supabase environment variables are not set');
       return NextResponse.json({ 
         success: false, 
         message: 'Server configuration error' 
@@ -155,8 +164,8 @@ export async function POST(request) {
         const processedBuffer = await sharpInstance.toBuffer();
         const metadata = await sharp(buffer).metadata();
 
-        // Upload to Supabase Storage
-        const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+        // Upload to Supabase Storage using regular client
+        const { data: uploadData, error: uploadError } = await supabase.storage
           .from(bucketName)
           .upload(filename, processedBuffer, {
             contentType: file.type,
@@ -173,7 +182,7 @@ export async function POST(request) {
         }
 
         // Get public URL
-        const { data: { publicUrl } } = supabaseAdmin.storage
+        const { data: { publicUrl } } = supabase.storage
           .from(bucketName)
           .getPublicUrl(filename);
 
@@ -202,7 +211,7 @@ export async function POST(request) {
           console.error('Database insert error:', dbError);
           
           // Clean up uploaded file if database insert fails
-          await supabaseAdmin.storage
+          await supabase.storage
             .from(bucketName)
             .remove([filename]);
             
@@ -335,7 +344,7 @@ export async function DELETE(request) {
 
     // Delete from Supabase Storage
     const bucketName = process.env.SUPABASE_STORAGE_BUCKET || 'images';
-    const { error: deleteError } = await supabaseAdmin.storage
+    const { error: deleteError } = await supabase.storage
       .from(bucketName)
       .remove([image.file_path]);
 
