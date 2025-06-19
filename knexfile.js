@@ -1,19 +1,35 @@
+// knexfile.js
+require('dotenv').config({ 
+  path: process.env.NODE_ENV === 'production' ? '.env.production' : '.env.local' 
+});
 
-require('dotenv').config();
+const commonConfig = {
+  client: 'postgresql',
+  connection: process.env.DATABASE_URL || {
+    host: process.env.DB_HOST,
+    port: parseInt(process.env.DB_PORT) || 6543,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME || 'postgres',
+    ssl: { rejectUnauthorized: false }
+  },
+  migrations: {
+    directory: './src/lib/db/migrations'
+  },
+  seeds: {
+    directory: './src/lib/db/seeds'
+  }
+};
 
 module.exports = {
   development: {
-    client: 'postgresql',
-    connection: {
-      host: 'aws-0-eu-north-1.pooler.supabase.com',
-      port: 6543,
-      database: 'postgres',
-      user: 'postgres.mghbexawntwdktpkmubp',
-      password: process.env.DB_PASSWORD,
-      ssl: { rejectUnauthorized: false }
-    },
-    migrations: {
-      directory: './src/lib/db/migrations'
-    }
+    ...commonConfig,
+    pool: { min: 2, max: 10 }
+  },
+  
+  production: {
+    ...commonConfig,
+    pool: { min: 2, max: 20 },
+    acquireConnectionTimeout: 60000
   }
 };
