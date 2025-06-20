@@ -1,4 +1,4 @@
-// src/lib/db/index.js - Alternative Supabase-only approach
+// src/lib/supabase.js - Alternative Supabase-only approach
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
