@@ -1,157 +1,251 @@
-// src/app/api/auth/register/route.js
-import { NextResponse } from 'next/server';
-import bcrypt from 'bcryptjs';
-import db from '@/lib/db/knex';
-import { knex } from '@/lib/db/index.js';
-import { validate } from '@/lib/validations/auth';
+// app/api/auth/register/route.js (App Router)
 
-/**
- * POST /api/auth/register
- * Registers a new user (without auto-login)
- */
+import { createClient } from '@supabase/supabase-js'
+import bcrypt from 'bcryptjs'
+
+// Initialize Supabase with service role key for server-side operations
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+)
+
+// For App Router (app/api/auth/register/route.js)
 export async function POST(request) {
   try {
-    console.log('=== Registration Start ===');
-    
-    // Parse request body
-    const body = await request.json();
-    console.log('Received body:', body);
-    
-    // Validate input using your existing validation
-    const { data, errors } = validate('register', body);
-    
-    if (errors) {
-      console.log('Validation errors:', errors);
-      return NextResponse.json(
-        { 
-          success: false, 
-          message: 'Validation failed', 
-          errors
-        }, 
+    const { email, password, username } = await request.json()
+
+    // Validate input
+    if (!email || !password || !username) {
+      return Response.json(
+        { error: 'Email, password, and username are required' },
         { status: 400 }
-      );
+      )
     }
-    
-    console.log('Validation passed');
-    
-    // Test database connection
-    try {
-      await db.raw('SELECT 1');
-      console.log('Database connection successful');
-    } catch (dbError) {
-      console.error('Database connection failed:', dbError);
-      return NextResponse.json(
-        { success: false, message: 'Database connection failed' },
-        { status: 500 }
-      );
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      return Response.json(
+        { error: 'Invalid email format' },
+        { status: 400 }
+      )
     }
-    
-    // Check if email already exists
-    console.log('Checking for existing user with email:', data.email);
-    const existingUser = await db('users')
-      .where({ email: data.email })
-      .first();
-    
+
+    // Validate password strength
+    if (password.length < 6) {
+      return Response.json(
+        { error: 'Password must be at least 6 characters long' },
+        { status: 400 }
+      )
+    }
+
+    // Check if user already exists
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('email, username')
+      .or(`email.eq.${email},username.eq.${username}`)
+      .single()
+
     if (existingUser) {
-      console.log('User already exists with email:', data.email);
-      return NextResponse.json(
-        { success: false, message: 'Email already in use' },
+      return Response.json(
+        { error: 'User with this email or username already exists' },
         { status: 409 }
-      );
+      )
     }
-    
-    // Check if username already exists
-    console.log('Checking for existing user with username:', data.username);
-    const existingUsername = await db('users')
-      .where({ username: data.username })
-      .first();
-    
-    if (existingUsername) {
-      console.log('User already exists with username:', data.username);
-      return NextResponse.json(
-        { success: false, message: 'Username already taken' },
-        { status: 409 }
-      );
-    }
-    
-    console.log('Email and username are available');
-    
+
     // Hash password
-    console.log('Hashing password...');
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(data.password, salt);
-    console.log('Password hashed successfully');
-    
-    // Create user data
-    const userData = {
-      username: data.username,
-      email: data.email,
-      password: hashedPassword,
-      first_name: data.first_name || null,
-      last_name: data.last_name || null,
-      role: 'user',
-      is_active: true,
-      created_at: new Date(),
-      updated_at: new Date(),
-    };
-    
-    console.log('User data prepared:', { ...userData, password: '[HIDDEN]' });
-    
-    // Create user and update platform stats in a transaction
-    console.log('Creating user and updating platform stats...');
-    
-    let newUser;
-    await knex.transaction(async (trx) => {
-      // Create user
-      console.log('Inserting user into database...');
-      [newUser] = await trx('users')
-        .insert(userData)
-        .returning(['id', 'username', 'email', 'first_name', 'last_name', 'role', 'created_at']);
-      
-      console.log('User created successfully:', newUser);
-      
-      // Update platform stats - increment registered users
-      await trx('platform_stats')
-        .where('stat_name', 'registered_users')
-        .increment('stat_value', 1);
-      
-      console.log('✅ User registration tracked - incremented registered_users');
-    });
-    
-    console.log('User creation and platform stats update completed');
-    
-    // Prepare response data (without token - user must login separately)
-    const responseData = {
-      id: newUser.id,
-      username: newUser.username,
-      email: newUser.email,
-      first_name: newUser.first_name,
-      last_name: newUser.last_name,
-      role: newUser.role,
-      created_at: newUser.created_at,
-    };
-    
-    console.log('=== Registration End - Success ===');
-    
-    // Return successful response without JWT token
-    return NextResponse.json({
-      success: true,
-      message: 'Registration successful. Please log in with your new account.',
-      data: {
-        user: responseData,
-        // No token provided - user must login separately
-        requiresLogin: true
-      }
-    }, { status: 201 });
-    
+    const hashedPassword = await bcrypt.hash(password, 10)
+
+    // Create user in database
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .insert([{
+        email: email,
+        username: username,
+        password: hashedPassword,
+        created_at: new Date().toISOString()
+        // Don't include 'id' - let the database auto-generate it
+      }])
+      .select()
+      .single()
+
+    if (userError) {
+      console.error('User creation error:', userError)
+      return Response.json(
+        { error: 'Failed to create user: ' + userError.message },
+        { status: 500 }
+      )
+    }
+
+    // Update platform stats
+    try {
+      await updatePlatformStats()
+    } catch (statsError) {
+      console.error('Platform stats update failed:', statsError)
+      // Don't fail registration if stats update fails
+    }
+
+    // Return success (don't include password in response)
+    const { password: _, ...userResponse } = userData
+
+    return Response.json({
+      message: 'User registered successfully',
+      user: userResponse
+    }, { status: 201 })
+
   } catch (error) {
-    console.error('=== Registration End - Error ===');
-    console.error('Registration error:', error);
-    console.error('Error stack:', error.stack);
-    
-    return NextResponse.json(
-      { success: false, message: 'An error occurred during registration', error: error.message },
+    console.error('Registration error:', error)
+    return Response.json(
+      { error: 'Internal server error: ' + error.message },
       { status: 500 }
-    );
+    )
+  }
+}
+
+// For Pages Router (pages/api/auth/register.js)
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  try {
+    const { email, password, username } = req.body
+
+    // Validate input
+    if (!email || !password || !username) {
+      return res.status(400).json({ error: 'Email, password, and username are required' })
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email format' })
+    }
+
+    // Validate password strength
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long' })
+    }
+
+    // Check if user already exists
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('email, username')
+      .or(`email.eq.${email},username.eq.${username}`)
+      .single()
+
+    if (existingUser) {
+      return res.status(409).json({ error: 'User with this email or username already exists' })
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10)
+
+    // Create user in database
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .insert([{
+        email: email,
+        username: username,
+        password: hashedPassword,
+        created_at: new Date().toISOString()
+        // Don't include 'id' - let the database auto-generate it
+      }])
+      .select()
+      .single()
+
+    if (userError) {
+      console.error('User creation error:', userError)
+      return res.status(500).json({ error: 'Failed to create user: ' + userError.message })
+    }
+
+    // Update platform stats
+    try {
+      await updatePlatformStats()
+    } catch (statsError) {
+      console.error('Platform stats update failed:', statsError)
+      // Don't fail registration if stats update fails
+    }
+
+    // Return success (don't include password in response)
+    const { password: _, ...userResponse } = userData
+
+    return res.status(201).json({
+      message: 'User registered successfully',
+      user: userResponse
+    })
+
+  } catch (error) {
+    console.error('Registration error:', error)
+    return res.status(500).json({ error: 'Internal server error: ' + error.message })
+  }
+}
+
+// Helper function to update platform stats
+async function updatePlatformStats() {
+  // Get current stats
+  const { data: currentStats, error: fetchError } = await supabase
+    .from('platform_stats')
+    .select('*')
+    .single()
+
+  if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = no rows returned
+    throw new Error('Failed to fetch platform stats: ' + fetchError.message)
+  }
+
+  if (currentStats) {
+    // Update existing stats
+    const { error: updateError } = await supabase
+      .from('platform_stats')
+      .update({
+        total_users: currentStats.total_users + 1,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', currentStats.id)
+
+    if (updateError) {
+      throw new Error('Failed to update platform stats: ' + updateError.message)
+    }
+  } else {
+    // Create initial stats record
+    const { error: insertError } = await supabase
+      .from('platform_stats')
+      .insert([{
+        total_users: 1,
+        total_listings: 0,
+        total_trades: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }])
+
+    if (insertError) {
+      throw new Error('Failed to create platform stats: ' + insertError.message)
+    }
+  }
+}
+
+// Test function to verify the fix
+export async function testRegistration() {
+  const testData = {
+    email: 'test@example.com',
+    password: 'testpassword123',
+    username: 'testuser'
+  }
+
+  try {
+    const response = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(testData)
+    })
+
+    const result = await response.json()
+    console.log('Registration test result:', result)
+    return result
+  } catch (error) {
+    console.error('Registration test failed:', error)
+    return { error: error.message }
   }
 }
