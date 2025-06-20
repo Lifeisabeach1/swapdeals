@@ -1,4 +1,6 @@
-// test-db.js
+// test-db.js with debugging
+console.log('🚀 Script starting...');
+
 require('dotenv').config();
 
 console.log('Testing database connection...');
@@ -55,47 +57,71 @@ async function testKnexConnection() {
     }
 }
 
-// Test 3: Supabase connection
+// Test 3: Supabase connection (Fixed)
 async function testSupabaseConnection() {
     console.log('\n--- Testing Supabase Connection ---');
     
     try {
+        console.log('📦 Loading Supabase client...');
         const { createClient } = require('@supabase/supabase-js');
         
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
         const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
         
+        console.log('Supabase URL exists:', !!supabaseUrl);
+        console.log('Service role key exists:', !!supabaseKey);
+        
         if (!supabaseUrl || !supabaseKey) {
             console.error('❌ Missing Supabase environment variables');
+            console.log('Required variables: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY');
             return;
         }
         
+        console.log('🔗 Creating Supabase client...');
         const supabase = createClient(supabaseUrl, supabaseKey);
         
-        // Try a simple query - adjust table name as needed
-        const { data, error } = await supabase
-            .from('information_schema.tables')
-            .select('table_name')
-            .limit(1);
+        // Simple REST API connectivity check
+        console.log('🌐 Testing REST API connectivity...');
+        const response = await fetch(`${supabaseUrl}/rest/v1/`, {
+            headers: {
+                'apikey': supabaseKey,
+                'Authorization': `Bearer ${supabaseKey}`
+            }
+        });
         
-        if (error) {
-            console.error('❌ Supabase query failed:', error.message);
+        if (response.ok) {
+            console.log('✅ Supabase connection successful! (REST API check)');
+            console.log('📊 Response status:', response.status);
         } else {
-            console.log('✅ Supabase connection successful!');
-            console.log('✅ Sample data:', data);
+            console.error('❌ Supabase REST API check failed:', response.status);
+            console.error('Response text:', await response.text());
         }
+        
     } catch (error) {
         console.error('❌ Supabase connection failed:', error.message);
+        console.error('Full error:', error);
     }
 }
 
 // Run all tests
 async function runAllTests() {
-    await testDirectConnection();
-    await testKnexConnection();
-    await testSupabaseConnection();
+    console.log('🎯 Starting all tests...');
     
-    console.log('\n--- Test Complete ---');
+    try {
+        await testDirectConnection();
+        await testKnexConnection();
+        await testSupabaseConnection();
+        
+        console.log('\n--- Test Complete ---');
+        console.log('✨ All tests finished!');
+    } catch (error) {
+        console.error('💥 Fatal error in test runner:', error);
+    }
 }
 
-runAllTests();
+console.log('📋 Calling runAllTests...');
+runAllTests().then(() => {
+    console.log('🏁 Script completed successfully');
+}).catch((error) => {
+    console.error('💀 Script failed:', error);
+});

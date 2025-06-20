@@ -1,16 +1,13 @@
-// src/lib/db/index.js
 import knex from 'knex';
-import config from '../../knexfile.js';
 
-// Use the appropriate environment config
-const environment = process.env.NODE_ENV || 'development';
-const dbConfig = config[environment];
+const db = knex({
+  client: 'pg', // or whatever database you're using
+  connection: {
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  }
+});
 
-// Create a singleton instance
-let db;
-
-if (!db) {
-  db = knex(dbConfig);
-}
-
+// Export the knex instance
+export { db as knex };
 export default db;
