@@ -1,13 +1,13 @@
 // app/api/dashboard/users/[id]/route.js
 import { NextResponse } from 'next/server';
-import db from '@/lib/db/knex';
+import { knex } from '@/lib/db/index.js';
 
 // GET handler to retrieve a specific user
 export async function GET(request, { params }) {
   try {
     const userId = params.id;
     
-    const user = await db('users').where({ id: userId }).first();
+    const user = await knex('users').where({ id: userId }).first();
     
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -30,14 +30,14 @@ export async function PUT(request, { params }) {
     const data = await request.json();
     
     // Check if user exists
-    const user = await db('users').where({ id: userId }).first();
+    const user = await knex('users').where({ id: userId }).first();
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
     
     // If updating email, check it's not already taken
     if (data.email && data.email !== user.email) {
-      const existingUser = await db('users').where({ email: data.email }).first();
+      const existingUser = await knex('users').where({ email: data.email }).first();
       if (existingUser) {
         return NextResponse.json(
           { error: 'Email already exists' },
@@ -47,14 +47,14 @@ export async function PUT(request, { params }) {
     }
     
     // Update user
-    await db('users')
+    await knex('users')
       .where({ id: userId })
       .update({
         ...data,
         updated_at: new Date()
       });
     
-    const updatedUser = await db('users').where({ id: userId }).first();
+    const updatedUser = await knex('users').where({ id: userId }).first();
     
     return NextResponse.json({ user: updatedUser }, { status: 200 });
   } catch (error) {
@@ -72,13 +72,13 @@ export async function DELETE(request, { params }) {
     const userId = params.id;
     
     // Check if user exists
-    const user = await db('users').where({ id: userId }).first();
+    const user = await knex('users').where({ id: userId }).first();
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
     
     // Delete user
-    await db('users').where({ id: userId }).del();
+    await knex('users').where({ id: userId }).del();
     
     return NextResponse.json(
       { message: 'User deleted successfully' },

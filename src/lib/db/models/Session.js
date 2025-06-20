@@ -1,5 +1,5 @@
 // lib/models/Session.js
-import knex from "../knex";
+import { knex } from '../index.js'
 import { v4 as uuidv4 } from 'uuid';
 
 /**

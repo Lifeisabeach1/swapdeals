@@ -1,6 +1,6 @@
 // src/app/api/cleanup-sessions/route.js
 import { NextResponse } from 'next/server';
-import db from '@/lib/db/knex';
+
 
 export async function GET(request) {
   try {

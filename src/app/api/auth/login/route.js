@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import db from '@/lib/db/knex';
+
 import { knex } from '@/lib/db/index.js';
 import { validate } from '@/lib/validations/auth';
 

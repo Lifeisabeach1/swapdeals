@@ -1,10 +1,11 @@
+// app/api/dashboard/users/route.js
 import { NextResponse } from 'next/server';
-import db from '@/lib/db/knex';
+import { knex } from '@/lib/db/index.js';
 
 // GET handler for retrieving all users
 export async function GET(request) {
   try {
-    const users = await db('users').select('*');
+    const users = await knex('users').select('*');
     return NextResponse.json({ users }, { status: 200 });
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -29,7 +30,7 @@ export async function POST(request) {
     }
     
     // Check if email already exists
-    const existingUser = await db('users').where({ email: data.email }).first();
+    const existingUser = await knex('users').where({ email: data.email }).first();
     if (existingUser) {
       return NextResponse.json(
         { error: 'Email already exists' },
@@ -38,7 +39,7 @@ export async function POST(request) {
     }
     
     // Insert new user
-    const [userId] = await db('users').insert({
+    const [userId] = await knex('users').insert({
       name: data.name,
       email: data.email,
       role: data.role || 'user',
@@ -46,7 +47,7 @@ export async function POST(request) {
       updated_at: new Date()
     }).returning('id');
     
-    const newUser = await db('users').where({ id: userId }).first();
+    const newUser = await knex('users').where({ id: userId }).first();
     
     return NextResponse.json({ user: newUser }, { status: 201 });
   } catch (error) {
