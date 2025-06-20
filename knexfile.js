@@ -1,5 +1,5 @@
 // knexfile.js
-require('dotenv').config();
+import 'dotenv/config';
 
 const commonConfig = {
   client: 'pg',
@@ -16,21 +16,22 @@ const commonConfig = {
   }
 };
 
-module.exports = {
+const config = {
   development: {
     ...commonConfig,
-    pool: { 
-      min: 2, 
-      max: 10 
+    pool: {
+      min: 2,
+      max: 10
     }
   },
-  
   production: {
     ...commonConfig,
-    pool: { 
-      min: 2, 
-      max: 20 
+    pool: {
+      min: 2,
+      max: 20
     },
     acquireConnectionTimeout: 60000
   }
 };
+
+export default config;
