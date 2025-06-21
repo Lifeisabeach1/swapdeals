@@ -7,38 +7,57 @@ const globalForDb = globalThis;
 // Create database configuration
 const dbConfig = {
   client: 'postgresql',
-  connection: process.env.DATABASE_URL ? {
-    // If using DATABASE_URL (like Supabase connection string)
+  connection: {
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
-  } : {
-    // If using individual environment variables
-    host: process.env.DB_HOST,
-    port: parseInt(process.env.DB_PORT) || 5432,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
     ssl: { rejectUnauthorized: false }
   },
   pool: {
-    min: 0,        // No minimum connections
-    max: 2,        // Increased slightly for better performance
-    createTimeoutMillis: 10000,
-    acquireTimeoutMillis: 10000,
-    idleTimeoutMillis: 10000,
+    min: 0,        // Keep at 0 for serverless
+    max: 1,        // CRITICAL: Set to 1 for serverless environments
+    createTimeoutMillis: 30000,    // Increased timeout
+    acquireTimeoutMillis: 30000,   // Increased timeout
+    idleTimeoutMillis: 30000,      // Increased idle timeout
     reapIntervalMillis: 1000,
     createRetryIntervalMillis: 200,
-    propagateCreateError: false
+    propagateCreateError: false,
+    // Add these important settings
+    destroyTimeoutMillis: 5000,
+    log: (message, logLevel) => {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`Knex ${logLevel}: ${message}`);
+      }
+    }
   },
-  acquireConnectionTimeout: 10000
+  // Remove this duplicate property
+  // acquireConnectionTimeout: 10000,  // This is redundant with acquireTimeoutMillis
+  
+  // Add these important serverless optimizations
+  debug: process.env.NODE_ENV !== 'production',
+  asyncStackTraces: process.env.NODE_ENV !== 'production'
 };
 
 // Create or reuse the database instance
 const db = globalForDb.db ?? knex(dbConfig);
 
-if (process.env.NODE_ENV !== 'production') {
+// In production, ensure we're using the global instance
+if (process.env.NODE_ENV === 'production') {
+  globalForDb.db = db;
+} else {
   globalForDb.db = db;
 }
+
+// Add graceful shutdown handling
+process.on('SIGINT', async () => {
+  console.log('Gracefully shutting down database connections...');
+  await db.destroy();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('Gracefully shutting down database connections...');
+  await db.destroy();
+  process.exit(0);
+});
 
 // Export both named and default exports for compatibility
 export { db as knex };
