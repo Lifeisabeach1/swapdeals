@@ -1,360 +1,331 @@
-// src/lib/middleware/auth.js
-import jwt from 'jsonwebtoken';
-import { knex } from '@/lib/db/index.js';
-import { cookies } from 'next/headers';
+// lib/middleware/auth.js
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import { verifyToken } from '@/lib/auth/jwt';
 
+/**
+ * Custom API Error class
+ */
 export class APIError extends Error {
-  constructor(message, statusCode = 500, code = null) {
+  constructor(message, statusCode = 500) {
     super(message);
     this.statusCode = statusCode;
-    this.code = code;
+    this.name = 'APIError';
   }
 }
 
-export const authenticateUser = async (request) => {
+/**
+ * Extract token from request headers
+ * @param {Request} request - Next.js request object
+ * @returns {string|null} Token string or null if not found
+ */
+const getToken = (request) => {
+  const authHeader = request.headers.get('authorization');
+  
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.substring(7).trim();
+  }
+  
+  return null;
+};
+
+/**
+ * Get authenticated user from token
+ * @param {string} token - JWT token
+ * @returns {Promise<Object|null>} User object or null
+ */
+const getAuthUser = async (token) => {
+  if (!token) return null;
+  
   try {
-    console.log('=== AUTHENTICATION START ===');
-    
-    let token;
-    
-    // First try to get token from Authorization header
-    const authHeader = request.headers.get('authorization');
-    console.log('Auth header present:', !!authHeader);
-    console.log('Auth header value:', authHeader);
-    
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.substring(7).trim(); // Remove 'Bearer ' prefix and trim
-      console.log('Token extracted from header, length:', token?.length);
-    }
-    
-    // If no header token, try cookies as fallback (App Router way)
-    if (!token) {
-      console.log('No Authorization header, checking cookies...');
-      try {
-        const cookieStore = cookies();
-        token = cookieStore.get('auth_token')?.value;
-        if (token) {
-          console.log('Token extracted from cookie, length:', token?.length);
-        }
-      } catch (cookieError) {
-        console.log('Cookie access failed:', cookieError.message);
-      }
-    }
-    
-    if (!token) {
-      throw new APIError('No token provided in header or cookies', 401, 'AUTH_FAILED');
-    }
-
-    // Sanitize token
-    const cleanToken = sanitizeToken(token);
-    if (!cleanToken) {
-      throw new APIError('Malformed token provided', 401, 'MALFORMED_TOKEN');
-    }
-
     // Verify JWT token
-    let decoded;
-    try {
-      decoded = jwt.verify(cleanToken, process.env.JWT_SECRET);
-      console.log('Token decoded successfully, userId:', decoded.userId);
-    } catch (jwtError) {
-      console.error('JWT verification failed:', jwtError.message);
-      
-      if (jwtError.name === 'TokenExpiredError') {
-        throw new APIError('Token has expired', 401, 'TOKEN_EXPIRED');
-      } else if (jwtError.name === 'JsonWebTokenError') {
-        throw new APIError('Invalid token', 401, 'INVALID_TOKEN');
-      } else {
-        throw new APIError('Token verification failed', 401, 'AUTH_FAILED');
-      }
-    }
-
-    // Check if user ID exists in decoded token
-    const userId = decoded.userId || decoded.id;
-    if (!userId) {
-      console.error('No user ID found in token payload:', decoded);
-      throw new APIError('Invalid token payload - missing user ID', 401, 'INVALID_TOKEN');
-    }
-
-    console.log('Querying user with ID:', userId);
+    const decoded = verifyToken(token);
+    if (!decoded) return null;
     
-    // Get user from database
-    const user = await knex('users')
-      .select('id', 'username', 'email', 'is_active', 'role')
-      .where('id', userId)
-      .first();
-
-    console.log('User query result:', user ? 'Found' : 'Not found');
-
-    if (!user) {
-      throw new APIError('User not found', 401, 'USER_NOT_FOUND');
-    }
-
-    // Check if user account is active
-    if (!user.is_active) {
-      throw new APIError('User account is not active', 401, 'ACCOUNT_INACTIVE');
-    }
-
-    // Add computed is_admin property for backward compatibility
-    user.is_admin = user.role === 'admin';
-
-    console.log('=== AUTHENTICATION SUCCESS ===');
-    return {
-      user,
-      token: decoded
-    };
-
-  } catch (error) {
-    console.error('=== AUTHENTICATION ERROR ===');
-    console.error('Error type:', error.constructor.name);
-    console.error('Error message:', error.message);
-    console.error('===============================');
+    // Initialize Supabase client
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
     
-    // Re-throw APIError as-is
-    if (error instanceof APIError) {
-      throw error;
-    }
+    // Fetch user from database
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, username, email, role, is_active')
+      .eq('id', decoded.id)
+      .single();
     
-    // Handle unexpected errors
-    throw new APIError('Authentication failed', 401, 'AUTH_FAILED');
-  }
-};
-
-// Token sanitization for malformed tokens
-export const sanitizeToken = (token) => {
-  if (!token) {
-    console.log('No token provided to sanitize');
-    return null;
-  }
-  
-  // Handle case where token might be the string "null"
-  if (token === 'null' || token === null) {
-    console.log('Token is null string or null value');
-    return null;
-  }
-  
-  let cleanToken = String(token).trim();
-  console.log('Original token length:', cleanToken.length);
-  
-  // Remove Bearer prefix if present
-  if (cleanToken.startsWith('Bearer ')) {
-    cleanToken = cleanToken.substring(7).trim();
-  }
-  
-  // Remove any quotes that might have been added
-  if (cleanToken.startsWith('"') && cleanToken.endsWith('"')) {
-    cleanToken = cleanToken.slice(1, -1);
-  }
-  
-  // Remove any extra whitespace or newlines
-  cleanToken = cleanToken.replace(/\s/g, '');
-  
-  // Check minimum length
-  if (cleanToken.length < 20) {
-    console.log('Token too short after cleaning:', cleanToken.length, 'chars');
-    return null;
-  }
-  
-  // Check if token looks like a JWT (should have 3 parts separated by dots)
-  const parts = cleanToken.split('.');
-  if (parts.length !== 3) {
-    console.log('Token does not have 3 parts, appears malformed. Parts:', parts.length);
-    return null;
-  }
-  
-  console.log('Token sanitized successfully, length:', cleanToken.length);
-  return cleanToken;
-};
-
-// Helper function to verify token (App Router compatible)
-export const verifyToken = async (token) => {
-  try {
-    const cleanToken = sanitizeToken(token);
-    
-    if (!cleanToken) {
-      console.log('No clean token after sanitization');
+    // Return null if user not found or inactive
+    if (error || !user || !user.is_active) {
       return null;
     }
     
-    console.log('Verifying sanitized token, length:', cleanToken.length);
-    
-    const decoded = jwt.verify(cleanToken, process.env.JWT_SECRET);
-    const userId = decoded.userId || decoded.id;
-    
-    if (!userId) {
-      console.log('No user ID in token');
-      return null;
-    }
-
-    // Use consistent column names
-    const user = await knex('users')
-      .select('id', 'username', 'email', 'is_active', 'role')
-      .where('id', userId)
-      .first();
-
-    if (!user || !user.is_active) {
-      console.log('User not found or inactive');
-      return null;
-    }
-
-    // Add computed is_admin property
-    user.is_admin = user.role === 'admin';
-
     return user;
   } catch (error) {
-    console.error('Token verification failed:', error.message);
+    console.error('Error getting auth user:', error);
     return null;
   }
 };
 
-// Basic auth middleware - THIS WAS MISSING
+/**
+ * Middleware to require authentication
+ * Verifies that user is logged in
+ * 
+ * @example
+ * export const GET = withAuth(async (request) => {
+ *   console.log('User:', request.user);
+ *   return NextResponse.json({ data: 'protected' });
+ * });
+ */
 export const withAuth = (handler) => {
   return async (request, context) => {
     try {
-      const auth = await authenticateUser(request);
-      
-      // Add user info to the request context
-      request.auth = auth;
-      
-      return await handler(request, context);
-    } catch (error) {
-      console.error('Auth middleware error:', error);
-      
-      return NextResponse.json(
-        {
-          success: false,
-          message: error.message || 'Authentication failed',
-          code: error.code || 'AUTH_FAILED'
-        },
-        {
-          status: error.statusCode || 401,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-    }
-  };
-};
-
-// App Router compatible admin middleware
-export const requireAdmin = (handler) => {
-  return async (request, context) => {
-    try {
-      console.log('=== ADMIN AUTH START ===');
-      
-      // Check if user is authenticated
-      const authHeader = request.headers.get('authorization');
-      console.log('Auth header present:', !!authHeader);
-      console.log('Auth header:', authHeader);
-      
-      if (!authHeader || authHeader === 'null') {
-        console.log('No authorization header or null header');
-        return NextResponse.json({
-          success: false,
-          error: 'Authentication required'
-        }, { status: 401 });
-      }
-
-      // Extract and verify token
-      let token = authHeader;
-      if (token.startsWith('Bearer ')) {
-        token = token.substring(7).trim();
-      }
-      
-      console.log('Extracted token length:', token.length);
-      console.log('Token value:', token);
-      
-      // Check for obviously malformed tokens
-      if (token.length < 20 || token === 'null') {
-        console.log('Token too short or null, likely malformed:', token);
-        return NextResponse.json({
-          success: false,
-          error: 'Malformed token'
-        }, { status: 401 });
-      }
-      
-      const user = await verifyToken(token);
+      const token = getToken(request);
+      const user = await getAuthUser(token);
       
       if (!user) {
-        console.log('Token verification failed');
-        return NextResponse.json({
-          success: false,
-          error: 'Invalid token'
-        }, { status: 401 });
-      }
-
-      console.log('User verified:', user.username, 'Admin:', user.is_admin);
-
-      // Check if user is admin
-      if (!user.is_admin) {
-        console.log('User is not admin');
-        return NextResponse.json({
-          success: false,
-          error: 'Admin access required'
-        }, { status: 403 });
-      }
-
-      // Add user to request object (App Router way)
-      request.user = user;
-      
-      console.log('=== ADMIN AUTH SUCCESS ===');
-      
-      // Call the original handler
-      return await handler(request, context);
-    } catch (error) {
-      console.error('Admin auth middleware error:', error);
-      return NextResponse.json({
-        success: false,
-        error: 'Authentication failed'
-      }, { status: 401 });
-    }
-  };
-};
-
-// Combined middleware for App Router
-export const withAuthAndAdmin = (handler, options = {}) => {
-  return async (request, context) => {
-    try {
-      const auth = await authenticateUser(request);
-      
-      // Check admin requirement
-      if (options.requireAdmin && !auth.user.is_admin) {
         return NextResponse.json(
-          {
+          { 
             success: false,
-            message: 'Admin access required',
-            code: 'ADMIN_REQUIRED'
+            error: 'Autentisering krävs' 
           },
-          {
-            status: 403,
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          }
+          { status: 401 }
         );
       }
       
-      // Add user info to the request context
-      request.auth = auth;
+      // Add user to request object
+      request.user = user;
       
+      // Call the wrapped handler
       return await handler(request, context);
     } catch (error) {
       console.error('Auth middleware error:', error);
-      
       return NextResponse.json(
-        {
+        { 
           success: false,
-          message: error.message || 'Authentication failed',
-          code: error.code || 'AUTH_FAILED'
+          error: 'Autentisering misslyckades' 
         },
-        {
-          status: error.statusCode || 401,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
+        { status: 401 }
       );
     }
   };
 };
+
+/**
+ * Middleware to require admin role
+ * Verifies that user is logged in AND has admin role
+ * 
+ * @example
+ * export const GET = withAdmin(async (request) => {
+ *   console.log('Admin user:', request.user);
+ *   return NextResponse.json({ data: 'admin only' });
+ * });
+ */
+export const withAdmin = (handler) => {
+  return async (request, context) => {
+    try {
+      const token = getToken(request);
+      const user = await getAuthUser(token);
+      
+      // Check if user exists
+      if (!user) {
+        return NextResponse.json(
+          { 
+            success: false,
+            error: 'Autentisering krävs' 
+          },
+          { status: 401 }
+        );
+      }
+      
+      // Check if user has admin role
+      if (user.role !== 'admin') {
+        return NextResponse.json(
+          { 
+            success: false,
+            error: 'Admin-behörighet krävs' 
+          },
+          { status: 403 }
+        );
+      }
+      
+      // Add user to request object
+      request.user = user;
+      
+      // Call the wrapped handler
+      return await handler(request, context);
+    } catch (error) {
+      console.error('Admin middleware error:', error);
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Autentisering misslyckades' 
+        },
+        { status: 401 }
+      );
+    }
+  };
+};
+
+/**
+ * Optional authentication middleware
+ * Adds user to request if token exists, but doesn't require authentication
+ * Useful for endpoints that work differently for logged-in vs anonymous users
+ * 
+ * @example
+ * export const GET = withOptionalAuth(async (request) => {
+ *   if (request.user) {
+ *     console.log('Logged in as:', request.user.username);
+ *   } else {
+ *     console.log('Anonymous user');
+ *   }
+ *   return NextResponse.json({ data: 'public or private' });
+ * });
+ */
+export const withOptionalAuth = (handler) => {
+  return async (request, context) => {
+    try {
+      const token = getToken(request);
+      const user = await getAuthUser(token);
+      
+      // Add user to request (can be null)
+      request.user = user;
+      
+      return await handler(request, context);
+    } catch (error) {
+      console.error('Optional auth error:', error);
+      // Set user as null and continue
+      request.user = null;
+      return await handler(request, context);
+    }
+  };
+};
+
+/**
+ * Helper function to verify admin directly (for use in route handlers)
+ * Returns user object or throws APIError
+ * 
+ * @example
+ * export async function POST(request) {
+ *   try {
+ *     const adminUser = await requireAdmin(request);
+ *     // ... admin logic
+ *   } catch (error) {
+ *     if (error instanceof APIError) {
+ *       return NextResponse.json({ error: error.message }, { status: error.statusCode });
+ *     }
+ *     throw error;
+ *   }
+ * }
+ */
+export const requireAdmin = async (request) => {
+  const token = getToken(request);
+  const user = await getAuthUser(token);
+  
+  if (!user) {
+    throw new APIError('Autentisering krävs', 401);
+  }
+  
+  if (user.role !== 'admin') {
+    throw new APIError('Admin-behörighet krävs', 403);
+  }
+  
+  return user;
+};
+
+/**
+ * Helper function to verify authentication directly (for use in route handlers)
+ * Returns user object or throws APIError
+ * 
+ * @example
+ * export async function POST(request) {
+ *   try {
+ *     const user = await requireAuth(request);
+ *     // ... authenticated logic
+ *   } catch (error) {
+ *     if (error instanceof APIError) {
+ *       return NextResponse.json({ error: error.message }, { status: error.statusCode });
+ *     }
+ *     throw error;
+ *   }
+ * }
+ */
+export const requireAuth = async (request) => {
+  const token = getToken(request);
+  const user = await getAuthUser(token);
+  
+  if (!user) {
+    throw new APIError('Autentisering krävs', 401);
+  }
+  
+  return user;
+};
+
+/**
+ * Middleware to check ownership of a resource
+ * Verifies user is authenticated and either owns the resource or is an admin
+ * 
+ * @param {Function} getResourceUserId - Function that returns the user_id of the resource
+ * @example
+ * export const PUT = withOwnership(
+ *   async (params) => {
+ *     const { data } = await supabase
+ *       .from('trade_listings')
+ *       .select('user_id')
+ *       .eq('id', params.id)
+ *       .single();
+ *     return data?.user_id;
+ *   },
+ *   async (request, context) => {
+ *     // User is either owner or admin
+ *     return NextResponse.json({ success: true });
+ *   }
+ * );
+ */
+export const withOwnership = (getResourceUserId, handler) => {
+  return async (request, context) => {
+    try {
+      const token = getToken(request);
+      const user = await getAuthUser(token);
+      
+      if (!user) {
+        return NextResponse.json(
+          { 
+            success: false,
+            error: 'Autentisering krävs' 
+          },
+          { status: 401 }
+        );
+      }
+      
+      // Get the resource's user_id
+      const resourceUserId = await getResourceUserId(context?.params || {});
+      
+      // Check if user is owner or admin
+      if (user.id !== resourceUserId && user.role !== 'admin') {
+        return NextResponse.json(
+          { 
+            success: false,
+            error: 'Du har inte behörighet att ändra denna resurs' 
+          },
+          { status: 403 }
+        );
+      }
+      
+      // Add user to request
+      request.user = user;
+      
+      return await handler(request, context);
+    } catch (error) {
+      console.error('Ownership middleware error:', error);
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Autentisering misslyckades' 
+        },
+        { status: 401 }
+      );
+    }
+  };
+};
+

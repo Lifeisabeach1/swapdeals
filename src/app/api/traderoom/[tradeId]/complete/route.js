@@ -1,97 +1,110 @@
-// src/app/api/trades/[tradeId]/complete/route.js
+// ============================================
+// app/api/trades/[tradeId]/complete/route.js
+// ============================================
 import { NextResponse } from 'next/server';
-import { knex } from '@/lib/db/index.js';
-import jwt from 'jsonwebtoken';
+import { createClient } from '@supabase/supabase-js';
+import { headers } from 'next/headers'; // ← LÄGG TILL
+import { verifyToken } from '@/lib/auth/jwt';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 export async function POST(request, { params }) {
   try {
-    // Await params before accessing properties
     const { tradeId } = await params;
     
-    // Get auth token
-    const authHeader = request.headers.get('authorization');
+    // ← FIX: Verify auth
+    const headersList = await headers();
+    const authHeader = headersList.get('authorization');
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({
         success: false,
-        message: 'Authorization token required'
+        message: 'Authorization required'
       }, { status: 401 });
     }
 
     const token = authHeader.substring(7);
+    const decoded = verifyToken(token);
 
-    // Verify token and get user
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (tokenError) {
-      console.error('Token verification failed:', tokenError);
+    if (!decoded) {
       return NextResponse.json({
         success: false,
         message: 'Invalid or expired token'
       }, { status: 401 });
     }
 
-    const userId = decoded.id;
-
-    // Check if trade exists and user is the seller
-    const trade = await knex('trades')
+    // Get trade (seller only)
+    const { data: trade, error: tradeError } = await supabase
+      .from('trades')
       .select('*')
-      .where('id', tradeId)
-      .andWhere('seller_id', userId)
-      .andWhere('status', 'accepted')
-      .first();
+      .eq('id', tradeId)
+      .eq('seller_id', decoded.id)
+      .eq('status', 'accepted')
+      .single();
 
-    if (!trade) {
+    if (tradeError || !trade) {
       return NextResponse.json({
         success: false,
-        message: 'Trade not found, access denied, or trade is not in accepted status'
+        message: 'Trade not found or access denied'
       }, { status: 404 });
     }
 
-    // Use transaction to ensure both operations succeed
-    const result = await knex.transaction(async (trx) => {
-      // Mark trade as completed
-      const updatedTrade = await trx('trades')
-        .where('id', tradeId)
+    const now = new Date().toISOString();
+
+    // Complete trade
+    const { data: updatedTrade, error } = await supabase
+      .from('trades')
+      .update({
+        status: 'completed',
+        completed_at: now,
+        updated_at: now
+      })
+      .eq('id', tradeId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating trade:', error);
+      return NextResponse.json({
+        success: false,
+        message: 'Failed to complete trade',
+        error: error.message
+      }, { status: 500 });
+    }
+
+    // Update platform stats
+    const { data: existingStats } = await supabase
+      .from('platform_stats')
+      .select('*')
+      .eq('stat_name', 'deals_made')
+      .single();
+
+    if (existingStats) {
+      await supabase
+        .from('platform_stats')
         .update({
-          status: 'completed',
-          completed_at: trx.fn.now(),
-          updated_at: trx.fn.now()
+          stat_value: existingStats.stat_value + 1,
+          updated_at: now
         })
-        .returning('*');
-
-      // Update or insert platform stats
-      const existingStats = await trx('platform_stats')
-        .select('*')
-        .where('stat_name', 'deals_made')
-        .first();
-
-      if (existingStats) {
-        // Update existing counter
-        await trx('platform_stats')
-          .where('stat_name', 'deals_made')
-          .update({
-            stat_value: existingStats.stat_value + 1,
-            updated_at: trx.fn.now()
-          });
-      } else {
-        // Insert new counter starting from 49
-        await trx('platform_stats').insert({
+        .eq('stat_name', 'deals_made');
+    } else {
+      await supabase
+        .from('platform_stats')
+        .insert({
           stat_name: 'deals_made',
-          stat_value: 49,
-          created_at: trx.fn.now(),
-          updated_at: trx.fn.now()
+          stat_value: 1,
+          created_at: now,
+          updated_at: now
         });
-      }
-
-      return updatedTrade[0];
-    });
+    }
 
     return NextResponse.json({
       success: true,
-      data: result,
-      message: 'Trade marked as completed successfully'
+      data: updatedTrade,
+      message: 'Trade completed successfully'
     });
 
   } catch (error) {

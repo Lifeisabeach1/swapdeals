@@ -1,123 +1,106 @@
-// ==================
-// app/api/testimonials/[id]/route.js - Individual testimonial routes
 
-// GET single testimonial
-export async function GET(request, { params }) {
+// ============================================
+// app/api/testimonials/[id]/route.js
+// ============================================
+
+// GET - Single testimonial
+export async function GET_SINGLE(request, { params }) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
-    const testimonial = await knex('testimonials')
-      .select([
-        'id',
-        'name',
-        'location',
-        'text',
-        'avatar',
-        'rating',
-        'bg_color as bgColor',
-        'is_verified as isVerified',
-        'is_active as isActive',
-        'created_at as createdAt'
-      ])
-      .where('id', id)
-      .first();
+    const { data, error } = await supabase
+      .from('testimonials')
+      .select('id, name, location, text, avatar, rating, bg_color, is_verified, is_active, created_at')
+      .eq('id', id)
+      .single();
 
-    if (!testimonial) {
-      return NextResponse.json(
-        { error: 'Testimonial not found' },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({ testimonial });
-
-  } catch (error) {
-    console.error('Error fetching testimonial:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch testimonial' },
-      { status: 500 }
-    );
-  }
-}
-
-// UPDATE testimonial (for admin use)
-export async function PATCH(request, { params }) {
-  try {
-    const { id } = params;
-    const body = await request.json();
-    const { isVerified, isActive } = body;
-
-    const updateData = {};
-    if (typeof isVerified !== 'undefined') {
-      updateData.is_verified = isVerified;
-    }
-    if (typeof isActive !== 'undefined') {
-      updateData.is_active = isActive;
-    }
-    updateData.updated_at = new Date();
-
-    const [updatedTestimonial] = await knex('testimonials')
-      .where('id', id)
-      .update(updateData)
-      .returning([
-        'id',
-        'name',
-        'location',
-        'text',
-        'avatar',
-        'rating',
-        'bg_color as bgColor',
-        'is_verified as isVerified',
-        'is_active as isActive',
-        'updated_at as updatedAt'
-      ]);
-
-    if (!updatedTestimonial) {
-      return NextResponse.json(
-        { error: 'Testimonial not found' },
-        { status: 404 }
-      );
+    if (error || !data) {
+      return NextResponse.json({ error: 'Testimonial not found' }, { status: 404 });
     }
 
     return NextResponse.json({
-      message: 'Testimonial updated successfully',
-      testimonial: updatedTestimonial
+      testimonial: {
+        id: data.id,
+        name: data.name,
+        location: data.location,
+        text: data.text,
+        avatar: data.avatar,
+        rating: data.rating,
+        bgColor: data.bg_color,
+        isVerified: data.is_verified,
+        isActive: data.is_active,
+        createdAt: data.created_at
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching testimonial:', error);
+    return NextResponse.json({ error: 'Failed to fetch testimonial' }, { status: 500 });
+  }
+}
+
+// PATCH - Update testimonial
+export async function PATCH_SINGLE(request, { params }) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    const { isVerified, isActive } = body;
+
+    const updateData = { updated_at: new Date().toISOString() };
+    if (typeof isVerified !== 'undefined') updateData.is_verified = isVerified;
+    if (typeof isActive !== 'undefined') updateData.is_active = isActive;
+
+    const { data, error } = await supabase
+      .from('testimonials')
+      .update(updateData)
+      .eq('id', id)
+      .select('id, name, location, text, avatar, rating, bg_color, is_verified, is_active, updated_at')
+      .single();
+
+    if (error || !data) {
+      return NextResponse.json({ error: 'Testimonial not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      message: 'Testimonial updated',
+      testimonial: {
+        id: data.id,
+        name: data.name,
+        location: data.location,
+        text: data.text,
+        avatar: data.avatar,
+        rating: data.rating,
+        bgColor: data.bg_color,
+        isVerified: data.is_verified,
+        isActive: data.is_active,
+        updatedAt: data.updated_at
+      }
     });
 
   } catch (error) {
     console.error('Error updating testimonial:', error);
-    return NextResponse.json(
-      { error: 'Failed to update testimonial' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to update testimonial' }, { status: 500 });
   }
 }
 
-// DELETE testimonial
-export async function DELETE(request, { params }) {
+// DELETE - Delete testimonial
+export async function DELETE_SINGLE(request, { params }) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
-    const deleted = await knex('testimonials')
-      .where('id', id)
-      .del();
+    const { error } = await supabase
+      .from('testimonials')
+      .delete()
+      .eq('id', id);
 
-    if (!deleted) {
-      return NextResponse.json(
-        { error: 'Testimonial not found' },
-        { status: 404 }
-      );
+    if (error) {
+      return NextResponse.json({ error: 'Testimonial not found' }, { status: 404 });
     }
 
-    return NextResponse.json({
-      message: 'Testimonial deleted successfully'
-    });
+    return NextResponse.json({ message: 'Testimonial deleted' });
 
   } catch (error) {
     console.error('Error deleting testimonial:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete testimonial' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to delete testimonial' }, { status: 500 });
   }
 }

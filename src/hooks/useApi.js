@@ -1,307 +1,146 @@
+// hooks/useApi.js
 'use client';
 
-import { useCallback, useContext } from 'react';
-import { AuthContext } from './useAuth'; // Import the context directly
+import { useContext, useCallback } from 'react';
+import { AuthContext } from './useAuth';
 
-/**
- * Hook for making API requests with authentication and standard error handling
- */
 const useApi = () => {
-  // Try to get auth context, but don't throw error if not available
   const authContext = useContext(AuthContext);
   const token = authContext?.token || null;
+  const baseURL = process.env.NEXT_PUBLIC_API_URL || '';
 
-  /**
-   * Base function to make fetch requests
-   */
-  const fetchData = useCallback(async (url, options = {}) => {
-    // Merge default headers with any provided headers
+  const fetchData = useCallback(async (endpoint, options = {}) => {
+    const url = `${baseURL}${endpoint}`;
     const headers = {
       'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-      ...(options.headers || {})
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...options.headers,
     };
 
     try {
-      console.log('Making API request to:', url, 'with token:', !!token);
-      
-      // Make the request
-      const response = await fetch(url, {
-        ...options,
-        headers
-      });
-
-      // Check if the response is JSON
+      const response = await fetch(url, { ...options, headers });
       const contentType = response.headers.get('content-type');
-      const isJson = contentType && contentType.includes('application/json');
-      
-      // Parse the response body
-      const data = isJson ? await response.json() : await response.text();
+      const data = contentType?.includes('application/json')
+        ? await response.json()
+        : await response.text();
 
-      console.log('API Response:', response.status, data);
-
-      // Handle non-2xx responses
       if (!response.ok) {
-        throw new Error(
-          isJson && data.message ? data.message : `Server responded with status ${response.status}`
-        );
+        throw new Error(data.message || data.error || `Request failed with status ${response.status}`);
       }
 
-      return isJson ? data : { success: true, data };
+      return data;
     } catch (error) {
-      console.error(`API Error (${url}):`, error);
-      
-      // Return standardized error response
-      return {
-        success: false,
-        message: error.message || 'An unknown error occurred',
-        error
-      };
+      console.error(`API Error (${endpoint}):`, error.message);
+      throw error;
     }
-  }, [token]);
+  }, [token, baseURL]);
 
-  /**
-   * GET request
-   */
-  const get = useCallback(async (url, queryParams = {}) => {
-    // Build URL with query parameters if provided
-    const queryString = Object.keys(queryParams).length > 0
-      ? '?' + new URLSearchParams(queryParams).toString()
-      : '';
-    
-    return fetchData(`${url}${queryString}`, { method: 'GET' });
+  const get = useCallback((endpoint, params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return fetchData(`${endpoint}${query ? `?${query}` : ''}`, { method: 'GET' });
   }, [fetchData]);
 
-  /**
-   * POST request
-   */
-  const post = useCallback(async (url, data = {}) => {
-    // Ensure images field is properly formatted if it exists
-    let processedData = { ...data };
-    if (processedData.images) {
-      if (typeof processedData.images === 'object' && !Array.isArray(processedData.images)) {
-        // If images is an object (like file metadata), stringify it
-        processedData.images = JSON.stringify(processedData.images);
-      } else if (Array.isArray(processedData.images)) {
-        // If images is an array, stringify it
-        processedData.images = JSON.stringify(processedData.images);
-      } else if (typeof processedData.images === 'string') {
-        // If it's already a string, validate it's proper JSON
-        try {
-          JSON.parse(processedData.images);
-          // It's valid JSON, keep as is
-        } catch (e) {
-          // Invalid JSON, wrap it in an array and stringify
-          processedData.images = JSON.stringify([processedData.images]);
-        }
-      }
-    }
-
-    return fetchData(url, {
+  const post = useCallback((endpoint, data = {}) => {
+    return fetchData(endpoint, {
       method: 'POST',
-      body: JSON.stringify(processedData)
+      body: JSON.stringify(data),
     });
   }, [fetchData]);
 
-  /**
-   * PUT request
-   */
-  const put = useCallback(async (url, data = {}) => {
-    // Process images field similar to POST
-    let processedData = { ...data };
-    if (processedData.images) {
-      if (typeof processedData.images === 'object' && !Array.isArray(processedData.images)) {
-        processedData.images = JSON.stringify(processedData.images);
-      } else if (Array.isArray(processedData.images)) {
-        processedData.images = JSON.stringify(processedData.images);
-      } else if (typeof processedData.images === 'string') {
-        try {
-          JSON.parse(processedData.images);
-        } catch (e) {
-          processedData.images = JSON.stringify([processedData.images]);
-        }
-      }
-    }
-
-    return fetchData(url, {
+  const put = useCallback((endpoint, data = {}) => {
+    return fetchData(endpoint, {
       method: 'PUT',
-      body: JSON.stringify(processedData)
+      body: JSON.stringify(data),
     });
   }, [fetchData]);
 
-  /**
-   * PATCH request
-   */
-  const patch = useCallback(async (url, data = {}) => {
-    // Process images field similar to POST
-    let processedData = { ...data };
-    if (processedData.images) {
-      if (typeof processedData.images === 'object' && !Array.isArray(processedData.images)) {
-        processedData.images = JSON.stringify(processedData.images);
-      } else if (Array.isArray(processedData.images)) {
-        processedData.images = JSON.stringify(processedData.images);
-      } else if (typeof processedData.images === 'string') {
-        try {
-          JSON.parse(processedData.images);
-        } catch (e) {
-          processedData.images = JSON.stringify([processedData.images]);
-        }
-      }
-    }
-
-    return fetchData(url, {
+  const patch = useCallback((endpoint, data = {}) => {
+    return fetchData(endpoint, {
       method: 'PATCH',
-      body: JSON.stringify(processedData)
+      body: JSON.stringify(data),
     });
   }, [fetchData]);
 
-  /**
-   * DELETE request
-   */
-  const del = useCallback(async (url) => {
-    return fetchData(url, { method: 'DELETE' });
+  const del = useCallback((endpoint) => {
+    return fetchData(endpoint, { method: 'DELETE' });
   }, [fetchData]);
 
-  /**
-   * Upload file(s) with proper FormData handling
-   */
-  const upload = useCallback(async (url, files, additionalData = {}) => {
+  const upload = useCallback(async (endpoint, files, additionalData = {}) => {
     const formData = new FormData();
-    
-    // Append files to FormData
+
     if (Array.isArray(files)) {
-      files.forEach((file, index) => {
-        formData.append(`file${index}`, file);
-        // Also append file metadata if needed
-        formData.append(`fileData${index}`, JSON.stringify({
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          lastModified: file.lastModified
-        }));
-      });
-      // Set total file count
-      formData.append('fileCount', files.length.toString());
+      files.forEach((file, idx) => formData.append(`file${idx}`, file));
+      formData.append('fileCount', files.length);
     } else if (files) {
       formData.append('file', files);
-      // Append file metadata
-      formData.append('fileData', JSON.stringify({
-        name: files.name,
-        size: files.size,
-        type: files.type,
-        lastModified: files.lastModified
-      }));
     }
-    
-    // Append additional data if provided
-    Object.keys(additionalData).forEach(key => {
-      if (key === 'images' && additionalData[key]) {
-        // Special handling for images field
-        if (typeof additionalData[key] === 'object') {
-          formData.append(key, JSON.stringify(additionalData[key]));
-        } else {
-          formData.append(key, additionalData[key]);
-        }
-      } else {
-        formData.append(key, 
-          typeof additionalData[key] === 'object' 
-            ? JSON.stringify(additionalData[key]) 
-            : additionalData[key]
-        );
-      }
-    });
-    
-    // For file uploads, don't set Content-Type (let browser set it with boundary)
-    // but keep Authorization header
-    const headers = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    
-    return fetchData(url, {
-      method: 'POST',
-      headers,
-      body: formData
-    });
-  }, [fetchData, token]);
 
-  /**
-   * Helper function to handle file uploads with base64 encoding
-   */
-  const uploadBase64 = useCallback(async (url, files, additionalData = {}) => {
-    const processFiles = async (fileList) => {
-      const filePromises = Array.from(fileList).map(file => {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            resolve({
+    Object.entries(additionalData).forEach(([key, value]) => {
+      formData.append(key, typeof value === 'object' ? JSON.stringify(value) : value);
+    });
+
+    const url = `${baseURL}${endpoint}`;
+    const headers = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Upload failed');
+      
+      return data;
+    } catch (error) {
+      console.error('Upload error:', error.message);
+      throw error;
+    }
+  }, [token, baseURL]);
+
+  const uploadBase64 = useCallback(async (endpoint, files, additionalData = {}) => {
+    const processFiles = (fileList) => {
+      return Promise.all(
+        Array.from(fileList).map(file => 
+          new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({
               name: file.name,
               size: file.size,
               type: file.type,
-              data: reader.result, // This includes the data:image/jpeg;base64, prefix
-              lastModified: file.lastModified
+              data: reader.result,
+              lastModified: file.lastModified,
             });
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-      });
-      
-      return Promise.all(filePromises);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          })
+        )
+      );
     };
 
     try {
-      let processedFiles = [];
-      
-      if (Array.isArray(files)) {
-        processedFiles = await processFiles(files);
-      } else if (files) {
-        processedFiles = await processFiles([files]);
-      }
-
-      const requestData = {
+      const processedFiles = await processFiles(Array.isArray(files) ? files : [files]);
+      return post(endpoint, {
         ...additionalData,
-        images: JSON.stringify(processedFiles)
-      };
-
-      return post(url, requestData);
+        images: JSON.stringify(processedFiles),
+      });
     } catch (error) {
-      console.error('Error processing files for base64 upload:', error);
-      return {
-        success: false,
-        message: 'Failed to process files',
-        error
-      };
+      console.error('Base64 upload error:', error.message);
+      throw error;
     }
   }, [post]);
 
-  /**
-   * Helper function to check if response was successful
-   */
-  const isSuccess = useCallback((response) => {
-    return response && response.success !== false;
-  }, []);
-
-  /**
-   * Helper function to extract error message from response
-   */
-  const getErrorMessage = useCallback((response) => {
-    if (!response) return 'Unknown error occurred';
-    return response.message || response.error?.message || 'An error occurred';
-  }, []);
-
-  return { 
-    get, 
-    post, 
-    put, 
-    patch, 
+  return {
+    get,
+    post,
+    put,
+    patch,
     delete: del,
     upload,
     uploadBase64,
-    isSuccess,
-    getErrorMessage,
-    // Expose the base fetchData function for custom requests
-    fetchData
+    fetchData,
   };
 };
 

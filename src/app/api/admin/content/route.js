@@ -1,7 +1,12 @@
-// 4. Updated content management route with delete functionality - app/api/admin/content/route.js
 import { NextResponse } from 'next/server';
-import { knex } from '@/lib/db/index.js';
-import { requireAdmin } from '@/lib/middleware/auth';
+import { createClient } from '@supabase/supabase-js';
+import { withAdmin } from '@/lib/middleware/auth';
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 /**
  * Get all content (Admin only)
@@ -13,17 +18,23 @@ async function getContent(request) {
     console.log('Authenticated user:', request.user.username);
 
     // Get all trade listings with user information
-    const trades = await knex('trades')
-      .select(
-        'trades.*',
-        'seller.username as seller_username',
-        'seller.email as seller_email',
-        'buyer.username as buyer_username',
-        'buyer.email as buyer_email'
-      )
-      .leftJoin('users as seller', 'trades.seller_id', 'seller.id')
-      .leftJoin('users as buyer', 'trades.buyer_id', 'buyer.id')
-      .orderBy('trades.created_at', 'desc');
+    const { data: trades, error } = await supabase
+      .from('trades')
+      .select(`
+        *,
+        seller:users!trades_seller_id_fkey(username, email),
+        buyer:users!trades_buyer_id_fkey(username, email)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching trades:', error);
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to fetch content',
+        details: error.message
+      }, { status: 500 });
+    }
 
     console.log(`Retrieved ${trades.length} trade listings`);
 
@@ -32,6 +43,10 @@ async function getContent(request) {
       ...trade,
       type: 'trade', // Add type for consistency
       description: trade.description || trade.title || 'No description',
+      seller_username: trade.seller?.username || null,
+      seller_email: trade.seller?.email || null,
+      buyer_username: trade.buyer?.username || null,
+      buyer_email: trade.buyer?.email || null
     }));
 
     return NextResponse.json({
@@ -67,25 +82,40 @@ async function deleteContent(request) {
       }, { status: 400 });
     }
 
-    let deletedRows = 0;
+    let deleteResult;
 
     // Delete based on content type
     switch (contentType) {
       case 'trade':
       default:
         // Delete from trades table
-        deletedRows = await knex('trades')
-          .where('id', contentId)
-          .del();
+        deleteResult = await supabase
+          .from('trades')
+          .delete()
+          .eq('id', contentId)
+          .select();
         break;
       
       // Add other content types as needed
       // case 'message':
-      //   deletedRows = await knex('messages').where('id', contentId).del();
+      //   deleteResult = await supabase
+      //     .from('messages')
+      //     .delete()
+      //     .eq('id', contentId)
+      //     .select();
       //   break;
     }
 
-    if (deletedRows === 0) {
+    if (deleteResult.error) {
+      console.error('Error deleting content:', deleteResult.error);
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to delete content',
+        details: deleteResult.error.message
+      }, { status: 500 });
+    }
+
+    if (!deleteResult.data || deleteResult.data.length === 0) {
       return NextResponse.json({
         success: false,
         error: 'Content not found or already deleted'
@@ -109,5 +139,5 @@ async function deleteContent(request) {
   }
 }
 
-export const GET = requireAdmin(getContent);
-export const DELETE = requireAdmin(deleteContent);
+export const GET = withAdmin(getContent);
+export const DELETE = withAdmin(deleteContent);

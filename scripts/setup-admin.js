@@ -3,7 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 const readline = require('readline');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
-const knex = require('knex');
+const { createClient } = require('@supabase/supabase-js');
 
 // Security Configuration
 const SECURITY_CONFIG = {
@@ -20,17 +20,11 @@ const SECURITY_CONFIG = {
   FIRST_SETUP_TOKEN: process.env.FIRST_SETUP_TOKEN, // Only for very first admin
 };
 
-// Initialize Knex
-const db = knex({
-  client: 'postgresql',
-  connection: {
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5433,
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME || 'vvslink',
-  },
-});
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 // Security check functions
 function checkEnvironment() {
@@ -61,8 +55,16 @@ function checkSetupKey() {
 }
 
 async function checkFirstSetupToken() {
-  const adminCount = await db('users').where('role', 'admin').count('id as count');
-  const hasAdmins = parseInt(adminCount[0].count) > 0;
+  const { data: adminUsers, error } = await supabase
+    .from('users')
+    .select('id')
+    .eq('role', 'admin');
+  
+  if (error) {
+    throw new Error(`❌ Database error: ${error.message}`);
+  }
+  
+  const hasAdmins = adminUsers && adminUsers.length > 0;
   
   if (!hasAdmins) {
     // First admin setup - require special token
@@ -101,12 +103,14 @@ async function authenticateExistingAdmin() {
     
     // In a real app, you'd hash the password and compare
     // This is a simplified example - implement proper password hashing
-    const admin = await db('users')
-      .where('username', username)
-      .where('role', 'admin')
-      .first();
+    const { data: admin, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', username)
+      .eq('role', 'admin')
+      .single();
     
-    if (!admin) {
+    if (error || !admin) {
       throw new Error('❌ Admin user not found');
     }
     
@@ -122,17 +126,24 @@ async function authenticateExistingAdmin() {
 
 async function logAdminAction(action, targetUserId, performedBy) {
   try {
-    await db('admin_logs').insert({
-      admin_id: performedBy || null, // Use null instead of 0 for system actions
-      action,
-      target_user_id: targetUserId,
-      details: JSON.stringify({
-        script_execution: true,
-        timestamp: new Date().toISOString()
-      }),
-      ip_address: process.env.CLIENT_IP || 'localhost',
-      user_agent: 'admin-setup-script'
-    });
+    const { error } = await supabase
+      .from('admin_logs')
+      .insert({
+        admin_id: performedBy || null,
+        action,
+        target_user_id: targetUserId,
+        details: JSON.stringify({
+          script_execution: true,
+          timestamp: new Date().toISOString()
+        }),
+        ip_address: process.env.CLIENT_IP || 'localhost',
+        user_agent: 'admin-setup-script',
+        created_at: new Date().toISOString()
+      });
+    
+    if (error) {
+      console.warn('⚠️ Failed to log admin action:', error.message);
+    }
   } catch (error) {
     console.warn('⚠️ Failed to log admin action:', error.message);
     // Don't throw error - allow the main operation to continue
@@ -141,11 +152,14 @@ async function logAdminAction(action, targetUserId, performedBy) {
 
 async function promoteToAdmin(userId, performedBy = null) {
   try {
-    const user = await db('users')
-      .where('id', userId)
-      .first();
+    // First get the user
+    const { data: user, error: getUserError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single();
 
-    if (!user) {
+    if (getUserError || !user) {
       throw new Error(`User with ID ${userId} not found`);
     }
 
@@ -154,18 +168,24 @@ async function promoteToAdmin(userId, performedBy = null) {
       return user;
     }
 
-    await db('users')
-      .where('id', userId)
+    // Update user role
+    const { error: updateError } = await supabase
+      .from('users')
       .update({
         role: 'admin',
-        updated_at: new Date()
-      });
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId);
+
+    if (updateError) {
+      throw new Error(`Failed to update user: ${updateError.message}`);
+    }
 
     // Log the action (won't throw error if logging fails)
     await logAdminAction('PROMOTE_TO_ADMIN', userId, performedBy);
 
     console.log(`✅ User ${user.username} (ID: ${userId}) promoted to admin`);
-    return user;
+    return { ...user, role: 'admin' };
   } catch (error) {
     console.error('Error promoting user to admin:', error);
     throw error;
@@ -187,7 +207,10 @@ async function setupAdmin() {
     
     // Check 3: Database connection
     try {
-      await db.raw('SELECT 1');
+      const { error } = await supabase.from('users').select('id').limit(1);
+      if (error) {
+        throw error;
+      }
       console.log('✅ Database connection successful');
     } catch (dbError) {
       console.error('❌ Database connection failed:', dbError.message);
@@ -227,16 +250,18 @@ async function setupAdmin() {
       }
       
       console.log('🔍 Looking for first user...');
-      const firstUser = await db('users')
-        .orderBy('id', 'asc')
-        .first();
+      const { data: firstUser, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('id', { ascending: true })
+        .limit(1)
+        .single();
 
-      if (!firstUser) {
+      if (error || !firstUser) {
         console.log('❌ No users found in database');
         process.exit(1);
       }
 
-      // Fixed: Pass null instead of 'FIRST_SETUP' string
       user = await promoteToAdmin(firstUser.id, null);
       console.log(`✅ Promoted first user: ${user.username} (ID: ${user.id})`);
 
@@ -246,11 +271,13 @@ async function setupAdmin() {
         process.exit(1);
       }
 
-      const foundUser = await db('users')
-        .where('username', username)
-        .first();
+      const { data: foundUser, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('username', username)
+        .single();
 
-      if (!foundUser) {
+      if (error || !foundUser) {
         console.log(`❌ User with username '${username}' not found`);
         process.exit(1);
       }
@@ -278,25 +305,26 @@ async function setupAdmin() {
     
     // Log failed attempts (won't throw error if logging fails)
     try {
-      await db('admin_logs').insert({
-        admin_id: null, // Use null instead of 0
-        action: 'FAILED_ADMIN_SETUP',
-        target_user_id: null,
-        details: JSON.stringify({
-          error: error.message,
-          script_execution: true,
-          timestamp: new Date().toISOString()
-        }),
-        ip_address: process.env.CLIENT_IP || 'localhost',
-        user_agent: 'admin-setup-script'
-      });
+      await supabase
+        .from('admin_logs')
+        .insert({
+          admin_id: null,
+          action: 'FAILED_ADMIN_SETUP',
+          target_user_id: null,
+          details: JSON.stringify({
+            error: error.message,
+            script_execution: true,
+            timestamp: new Date().toISOString()
+          }),
+          ip_address: process.env.CLIENT_IP || 'localhost',
+          user_agent: 'admin-setup-script',
+          created_at: new Date().toISOString()
+        });
     } catch (logError) {
       console.warn('⚠️ Failed to log error:', logError.message);
     }
     
     process.exit(1);
-  } finally {
-    await db.destroy();
   }
 }
 

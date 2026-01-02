@@ -1,18 +1,25 @@
 // src/app/api/images/[id]/route.js
 import { NextResponse } from 'next/server';
-import { knex } from '@/lib/db/index.js';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 export async function GET(request, { params }) {
   try {
     const { id } = await params;
 
     // Get image metadata from database
-    const image = await knex('images')
+    const { data: image, error } = await supabase
+      .from('images')
       .select('*')
-      .where({ id })
-      .first();
+      .eq('id', id)
+      .single();
 
-    if (!image) {
+    if (error || !image) {
       return NextResponse.json(
         { error: 'Image not found' },
         { status: 404 }

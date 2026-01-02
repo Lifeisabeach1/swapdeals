@@ -1,14 +1,18 @@
 // src/app/api/images/[id]/rotate/route.js
 import { NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
-import { knex } from '@/lib/db/index.js';
-import { supabase } from '@/lib/supabase.js';
+import { createClient } from '@supabase/supabase-js';
+import { verifyToken } from '@/lib/auth/jwt';
 import sharp from 'sharp';
 import path from 'path';
 
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
 export async function POST(request, { params }) {
   try {
-    // Await params before accessing properties
     const { id } = await params;
     const imageId = id;
     
@@ -22,7 +26,7 @@ export async function POST(request, { params }) {
     // Verify authentication
     const authHeader = request.headers.get('authorization');
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ 
         success: false, 
         message: 'Authorization required' 
@@ -30,25 +34,16 @@ export async function POST(request, { params }) {
     }
     
     const token = authHeader.substring(7);
-    let decoded;
+    const decoded = verifyToken(token);
     
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (jwtError) {
+    if (!decoded) {
       return NextResponse.json({ 
         success: false, 
         message: 'Invalid or expired token' 
       }, { status: 401 });
     }
     
-    const userId = decoded.userId || decoded.id;
-    
-    if (!userId) {
-      return NextResponse.json({ 
-        success: false, 
-        message: 'Invalid token payload' 
-      }, { status: 401 });
-    }
+    const userId = decoded.id;
 
     // Get rotation from request body
     const body = await request.json();
@@ -64,12 +59,14 @@ export async function POST(request, { params }) {
     }
 
     // Find the image and verify ownership
-    const image = await knex('images')
-      .where('id', imageId)
-      .where('user_id', userId)
-      .first();
+    const { data: image, error: fetchError } = await supabase
+      .from('images')
+      .select('*')
+      .eq('id', imageId)
+      .eq('user_id', userId)
+      .single();
 
-    if (!image) {
+    if (fetchError || !image) {
       return NextResponse.json({
         success: false,
         message: 'Image not found or access denied'
@@ -110,9 +107,8 @@ export async function POST(request, { params }) {
         .webp({ quality: 85 })
         .withMetadata(false);
 
-      // Get the processed buffer and new metadata
+      // Get the processed buffer
       const processedBuffer = await sharpInstance.toBuffer();
-      const newMetadata = await sharpInstance.metadata();
 
       // Generate new filename to avoid caching issues
       const timestamp = Date.now();
@@ -121,7 +117,7 @@ export async function POST(request, { params }) {
       const newFilename = `${userId}/${timestamp}-${randomString}${extension}`;
 
       // Upload the rotated image to Supabase
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from(bucketName)
         .upload(newFilename, processedBuffer, {
           contentType: image.mime_type,
@@ -158,8 +154,8 @@ export async function POST(request, { params }) {
       }
 
       // Update the database record
-      await knex('images')
-        .where('id', imageId)
+      const { error: updateError } = await supabase
+        .from('images')
         .update({
           filename: newFilename.split('/').pop(),
           file_path: newFilename,
@@ -168,8 +164,17 @@ export async function POST(request, { params }) {
           rotation: totalRotation,
           processed_width: newWidth,
           processed_height: newHeight,
-          updated_at: knex.fn.now()
-        });
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', imageId);
+
+      if (updateError) {
+        console.error('Database update error:', updateError);
+        return NextResponse.json({
+          success: false,
+          message: 'Failed to update image record'
+        }, { status: 500 });
+      }
 
       // Clean up the old file from Supabase
       try {
@@ -185,20 +190,22 @@ export async function POST(request, { params }) {
       }
 
       // Fetch the updated record
-      const updatedImage = await knex('images')
-        .where('id', imageId)
-        .first();
+      const { data: updatedImage } = await supabase
+        .from('images')
+        .select('*')
+        .eq('id', imageId)
+        .single();
 
       return NextResponse.json({
         success: true,
         message: 'Image rotated successfully',
         image: {
-          id: updatedImage.id,
-          filename: updatedImage.filename,
-          url: updatedImage.url,
-          rotation: updatedImage.rotation,
-          width: updatedImage.processed_width,
-          height: updatedImage.processed_height
+          id: updatedImage?.id || imageId,
+          filename: updatedImage?.filename || newFilename.split('/').pop(),
+          url: updatedImage?.url || publicUrl,
+          rotation: updatedImage?.rotation || totalRotation,
+          width: updatedImage?.processed_width || newWidth,
+          height: updatedImage?.processed_height || newHeight
         }
       });
 
@@ -212,18 +219,9 @@ export async function POST(request, { params }) {
 
   } catch (error) {
     console.error('Rotate API error:', error);
-    
-    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
-      return NextResponse.json({ 
-        success: false, 
-        message: 'Invalid or expired token' 
-      }, { status: 401 });
-    }
-    
     return NextResponse.json({
       success: false,
-      message: 'Failed to rotate image',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Rotation failed'
+      message: 'Failed to rotate image'
     }, { status: 500 });
   }
 }

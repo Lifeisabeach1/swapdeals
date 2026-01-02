@@ -1,48 +1,57 @@
-// src/app/api/user/conversations/[tradeId]/mark-read/route.js
+// app/api/user/conversations/[tradeId]/mark-read/route.js
 import { NextResponse } from 'next/server';
-import { knex } from '@/lib/db/index.js';
-import jwt from 'jsonwebtoken';
+import { createClient } from '@supabase/supabase-js';
+import { verifyToken } from '@/lib/auth/jwt';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 export async function POST(request, { params }) {
   try {
-    // Await params before destructuring
     const { tradeId } = await params;
 
-    // Get auth token
+    // Get authorization header directly from request
     const authHeader = request.headers.get('authorization');
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ 
-        success: false, 
-        message: 'Authorization token required' 
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({
+        success: false,
+        message: 'Authorization required'
       }, { status: 401 });
     }
 
     const token = authHeader.substring(7);
+    const decoded = verifyToken(token);
 
-    // Verify token and get user
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (tokenError) {
-      console.error('Token verification failed:', tokenError);
-      return NextResponse.json({ 
-        success: false, 
-        message: 'Invalid or expired token' 
+    if (!decoded) {
+      return NextResponse.json({
+        success: false,
+        message: 'Invalid or expired token'
       }, { status: 401 });
     }
 
-    const userId = decoded.id;
+    // Mark unread messages as read
+    const { data, error } = await supabase
+      .from('trade_messages')
+      .update({ read_at: new Date().toISOString() })
+      .eq('trade_id', tradeId)
+      .neq('sender_id', decoded.id)
+      .eq('is_deleted', false)
+      .is('read_at', null)
+      .select();
 
-    // Mark all unread messages in this trade as read (where the current user is NOT the sender)
-    const updatedCount = await knex('trade_messages')
-      .where('trade_id', tradeId)
-      .where('sender_id', '!=', userId)
-      .where('is_deleted', false)
-      .whereNull('read_at')
-      .update({
-        read_at: knex.fn.now()
-      });
+    if (error) {
+      console.error('Error marking messages as read:', error);
+      return NextResponse.json({
+        success: false,
+        message: 'Failed to mark messages as read',
+        error: error.message
+      }, { status: 500 });
+    }
+
+    const updatedCount = data?.length || 0;
 
     return NextResponse.json({
       success: true,
@@ -57,20 +66,5 @@ export async function POST(request, { params }) {
       message: 'Failed to mark messages as read',
       error: error.message
     }, { status: 500 });
-  }
-}
-
-// src/app/api/traderoom/[tradeId]/messages/route.js  
-export async function GET(request, { params }) {
-  try {
-    // Await params before destructuring
-    const { tradeId } = await params;
-
-    // Get auth token
-    const authHeader = request.headers.get('authorization');
-    
-    // Rest of your code...
-  } catch (error) {
-    // Error handling
   }
 }

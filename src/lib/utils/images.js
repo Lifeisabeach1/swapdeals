@@ -1,13 +1,97 @@
 // src/utils/imageUpload.js
 
 /**
+ * Compress and resize an image file, converting to WebP format
+ * @param {File} file - Original image file
+ * @param {number} maxWidth - Maximum width in pixels (default: 1200)
+ * @param {number} maxHeight - Maximum height in pixels (default: 1200)
+ * @param {number} quality - WebP quality 0-1 (default: 0.80)
+ * @returns {Promise<File>} Compressed WebP image file
+ */
+async function compressImage(file, maxWidth = 1200, maxHeight = 1200, quality = 0.80) {
+  console.log(`🔄 Compressing image to WebP: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)}MB)`);
+  
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    
+    reader.onload = (e) => {
+      const img = new Image();
+      
+      img.onerror = () => reject(new Error('Failed to load image'));
+      
+      img.onload = () => {
+        // Calculate new dimensions while maintaining aspect ratio
+        let width = img.width;
+        let height = img.height;
+        
+        if (width > maxWidth || height > maxHeight) {
+          const aspectRatio = width / height;
+          
+          if (width > height) {
+            width = maxWidth;
+            height = width / aspectRatio;
+          } else {
+            height = maxHeight;
+            width = height * aspectRatio;
+          }
+        }
+        
+        // Create canvas and draw resized image
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Convert to WebP blob
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error('Failed to compress image'));
+              return;
+            }
+            
+            // Create new File object with .webp extension
+            const originalName = file.name.replace(/\.(jpe?g|png|webp)$/i, '');
+            const webpFileName = `${originalName}.webp`;
+            
+            const compressedFile = new File([blob], webpFileName, {
+              type: 'image/webp',
+              lastModified: Date.now()
+            });
+            
+            const originalSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+            const newSizeMB = (compressedFile.size / (1024 * 1024)).toFixed(2);
+            const reduction = (((file.size - compressedFile.size) / file.size) * 100).toFixed(1);
+            
+            console.log(`✅ Compressed to WebP: ${originalSizeMB}MB → ${newSizeMB}MB (${reduction}% reduction)`);
+            
+            resolve(compressedFile);
+          },
+          'image/webp',
+          quality
+        );
+      };
+      
+      img.src = e.target.result;
+    };
+    
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
  * Upload multiple images to the server
  * @param {File[]} files - Array of image files to upload
  * @param {string} token - JWT authentication token
  * @param {number[]} rotations - Optional array of rotation values (0, 90, 180, 270)
+ * @param {boolean} autoCompress - Automatically compress images (default: true)
  * @returns {Promise<Object>} Upload result with image data
  */
-export async function uploadImages(files, token, rotations = []) {
+export async function uploadImages(files, token, rotations = [], autoCompress = true) {
   console.log('📤 Starting image upload process...');
   
   try {
@@ -27,6 +111,8 @@ export async function uploadImages(files, token, rotations = []) {
     console.log(`Uploading ${files.length} file(s)...`);
 
     // Validate files before upload
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       console.log(`Validating file ${i + 1}: ${file.name}`);
@@ -42,11 +128,10 @@ export async function uploadImages(files, token, rotations = []) {
         throw new Error(`Invalid file type: ${file.name}. Only JPEG, PNG, and WebP allowed.`);
       }
 
-      // Check file size (10MB limit)
-      const maxSize = 10 * 1024 * 1024;
+      // Check file size BEFORE processing
       if (file.size > maxSize) {
         const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-        throw new Error(`File too large: ${file.name} (${sizeMB}MB). Maximum 10MB allowed.`);
+        throw new Error(`File too large: ${file.name} (${sizeMB}MB). Maximum 10MB allowed. Please choose a smaller image.`);
       }
 
       // Check if file is corrupted (size 0)
@@ -55,11 +140,33 @@ export async function uploadImages(files, token, rotations = []) {
       }
     }
 
+    // Compress files after validation
+    const processedFiles = [];
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      console.log(`Processing file ${i + 1}: ${file.name}`);
+      
+      // Compress all images automatically
+      let processedFile = file;
+      
+      if (autoCompress) {
+        try {
+          processedFile = await compressImage(file);
+        } catch (compressionError) {
+          console.warn('⚠️ Compression failed, using original:', compressionError);
+          processedFile = file;
+        }
+      }
+      
+      processedFiles.push(processedFile);
+    }
+
     // Prepare form data
     const formData = new FormData();
     
     // Add files
-    files.forEach((file, index) => {
+    processedFiles.forEach((file, index) => {
       formData.append('images', file);
       console.log(`Added file ${index + 1}: ${file.name} (${file.type}, ${file.size} bytes)`);
     });
@@ -73,7 +180,7 @@ export async function uploadImages(files, token, rotations = []) {
     });
 
     // Ensure we have rotation values for all files
-    while (formData.getAll('rotations').length < files.length) {
+    while (formData.getAll('rotations').length < processedFiles.length) {
       formData.append('rotations', '0');
     }
 

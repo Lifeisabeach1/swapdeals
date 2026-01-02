@@ -1,175 +1,80 @@
-// src/app/api/admin/trade-listings/route.js
+// ============================================================================
+// FILE 1: app/api/admin/trade-listings/route.js
+// List all trade listings with pagination and filters
+// ============================================================================
 import { NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/middleware/auth';
-import { knex } from '@/lib/db/index.js';
+import { supabase } from '@/lib/supabase';
 
-// GET handler wrapped with admin middleware
-export const GET = requireAdmin(async (request) => {
+// GET - List all trade listings
+export async function GET(request) {
   try {
-    console.log('=== TRADE LISTINGS API START ===');
-    console.log('Admin user:', request.user.username);
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get('page')) || 1;
+    const limit = parseInt(searchParams.get('limit')) || 20;
+    const status = searchParams.get('status');
+    const search = searchParams.get('search');
+    const offset = (page - 1) * limit;
 
-    // First, let's check what columns actually exist
-    const columnInfo = await knex('trade_listings').columnInfo();
-    console.log('Available columns in trade_listings:', Object.keys(columnInfo));
+    let query = supabase
+      .from('trade_listings')
+      .select(`
+        id,
+        user_id,
+        title,
+        description,
+        category,
+        location,
+        status,
+        views,
+        created_at,
+        updated_at,
+        users!inner (
+          username,
+          email
+        )
+      `, { count: 'exact' })
+      .order('created_at', { ascending: false });
 
-    // Let's also check if there are any records at all
-    const totalCount = await knex('trade_listings').count('* as count').first();
-    console.log('Total records in trade_listings:', totalCount.count);
+    if (status) query = query.eq('status', status);
+    if (search) query = query.ilike('title', `%${search}%`);
+    query = query.range(offset, offset + limit - 1);
 
-    // Try a simple query first to see what we get
-    const simpleQuery = await knex('trade_listings').select('*').limit(5);
-    console.log('Sample records:', simpleQuery);
+    const { data: listings, error, count } = await query;
 
-    // Now try the full query with only columns that definitely exist
-    // Start with basic columns that should exist from your first migration
-    const tradeListings = await knex('trade_listings as tl')
-      .leftJoin('users as u', 'tl.user_id', 'u.id')
-      .select(
-        'tl.id',
-        'tl.user_id',
-        'tl.title',
-        'tl.description',
-        'tl.location',
-        'tl.status',
-        'tl.created_at',
-        'tl.updated_at',
-        'u.username',
-        'u.email'
-      )
-      .orderBy('tl.created_at', 'desc');
+    if (error) throw error;
 
-    console.log(`Found ${tradeListings.length} trade listings`);
-    console.log('Trade listings data:', tradeListings);
+    const transformedListings = listings.map(listing => ({
+      id: listing.id,
+      user_id: listing.user_id,
+      title: listing.title,
+      description: listing.description,
+      category: listing.category,
+      location: listing.location,
+      status: listing.status,
+      views: listing.views || 0,
+      created_at: listing.created_at,
+      updated_at: listing.updated_at,
+      username: listing.users?.username,
+      email: listing.users?.email
+    }));
 
     return NextResponse.json({
       success: true,
-      data: tradeListings,
-      count: tradeListings.length,
-      debug: {
-        availableColumns: Object.keys(columnInfo),
-        totalRecords: totalCount.count,
-        sampleData: simpleQuery
+      data: transformedListings,
+      pagination: {
+        page,
+        limit,
+        total: count,
+        totalPages: Math.ceil(count / limit),
+        hasMore: offset + limit < count
       }
     });
 
   } catch (error) {
     console.error('Trade listings API error:', error);
-    
     return NextResponse.json({
       success: false,
-      error: error.message || 'Failed to fetch trade listings',
-      debug: {
-        errorMessage: error.message,
-        errorCode: error.code,
-        errorDetail: error.detail
-      }
-    }, { 
-      status: error.statusCode || 500 
-    });
+      error: 'Failed to fetch trade listings'
+    }, { status: 500 });
   }
-});
-
-// DELETE handler for deleting trade listings
-export const DELETE = requireAdmin(async (request) => {
-  try {
-    const { searchParams } = new URL(request.url);
-    const listingId = searchParams.get('id');
-
-    if (!listingId) {
-      return NextResponse.json({
-        success: false,
-        error: 'Listing ID is required'
-      }, { status: 400 });
-    }
-
-    console.log('Deleting trade listing:', listingId);
-
-    // Check if listing exists
-    const listing = await knex('trade_listings')
-      .where('id', listingId)
-      .first();
-
-    if (!listing) {
-      return NextResponse.json({
-        success: false,
-        error: 'Trade listing not found'
-      }, { status: 404 });
-    }
-
-    // Delete the listing
-    await knex('trade_listings')
-      .where('id', listingId)
-      .del();
-
-    console.log('Trade listing deleted successfully');
-
-    return NextResponse.json({
-      success: true,
-      message: 'Trade listing deleted successfully'
-    });
-
-  } catch (error) {
-    console.error('Delete trade listing error:', error);
-    
-    return NextResponse.json({
-      success: false,
-      error: error.message || 'Failed to delete trade listing'
-    }, { 
-      status: 500 
-    });
-  }
-});
-
-// PUT handler for updating trade listing status
-export const PUT = requireAdmin(async (request) => {
-  try {
-    const { listingId, status } = await request.json();
-
-    if (!listingId || !status) {
-      return NextResponse.json({
-        success: false,
-        error: 'Listing ID and status are required'
-      }, { status: 400 });
-    }
-
-    console.log('Updating trade listing:', listingId, 'to status:', status);
-
-    // Check if listing exists
-    const listing = await knex('trade_listings')
-      .where('id', listingId)
-      .first();
-
-    if (!listing) {
-      return NextResponse.json({
-        success: false,
-        error: 'Trade listing not found'
-      }, { status: 404 });
-    }
-
-    // Update the listing status
-    await knex('trade_listings')
-      .where('id', listingId)
-      .update({
-        status: status,
-        updated_at: new Date()
-      });
-
-    console.log('Trade listing status updated successfully');
-
-    return NextResponse.json({
-      success: true,
-      message: 'Trade listing status updated successfully'
-    });
-
-  } catch (error) {
-    console.error('Update trade listing error:', error);
-    
-    return NextResponse.json({
-      success: false,
-      error: error.message || 'Failed to update trade listing'
-    }, { 
-      status: 500 
-    });
-  }
-});
+}

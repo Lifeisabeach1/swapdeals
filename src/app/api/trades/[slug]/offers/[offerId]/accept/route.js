@@ -1,141 +1,151 @@
 // src/app/api/trades/[slug]/offers/[offerId]/accept/route.js
 import { NextResponse } from 'next/server';
-import { knex } from '@/lib/db/index.js';
-import jwt from 'jsonwebtoken';
+import { createClient } from '@supabase/supabase-js';
+import { headers } from 'next/headers'; // ← LÄGG TILL DENNA
+import { verifyToken } from '@/lib/auth/jwt';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 export async function POST(request, { params }) {
   try {
-    const { slug, offerId } = await params; // Await params before destructuring
+    const { slug, offerId } = await params;
     
-    console.log('Accept offer - URL Parameters:', { slug, offerId });
-    
-    // Verify that we have both parameters
     if (!slug || !offerId) {
-      console.log('Missing parameters - slug:', slug, 'offerId:', offerId);
       return NextResponse.json({ 
         success: false, 
         message: 'Listing slug and Offer ID are required' 
       }, { status: 400 });
     }
 
-    // Get auth token
-    const authHeader = request.headers.get('authorization');
-    console.log('Auth header present:', !!authHeader);
+    // ← FIX: Verify auth med headers()
+    const headersList = await headers();
+    const authHeader = headersList.get('authorization');
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ 
         success: false, 
-        message: 'Authorization token required' 
+        message: 'Authorization required' 
       }, { status: 401 });
     }
 
     const token = authHeader.substring(7);
-    console.log('Token found, attempting to verify...');
+    const decoded = verifyToken(token);
 
-    // Verify token and get user
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-      console.log('Token decoded successfully:', { userId: decoded.id });
-    } catch (tokenError) {
-      console.error('Token verification failed:', tokenError);
+    if (!decoded) {
       return NextResponse.json({ 
         success: false, 
         message: 'Invalid or expired token' 
       }, { status: 401 });
     }
 
-    // Start a transaction
-    const trx = await knex.transaction();
+    // Get listing
+    const { data: listing, error: listingError } = await supabase
+      .from('trade_listings')
+      .select('id, user_id, title, status')
+      .eq('slug', slug)
+      .single();
 
-    try {
-      // First, get the listing by slug to get the listing ID
-      const listing = await trx('trade_listings')
-        .select('id', 'user_id', 'title', 'status')
-        .where('slug', slug)
-        .first();
+    if (listingError || !listing) {
+      console.error('Listing error:', listingError);
+      return NextResponse.json({
+        success: false,
+        message: 'Listing not found',
+        error: listingError?.message
+      }, { status: 404 });
+    }
 
-      if (!listing) {
-        await trx.rollback();
-        return NextResponse.json({
-          success: false,
-          message: 'Listing not found'
-        }, { status: 404 });
+    // Verify ownership
+    if (listing.user_id !== decoded.id) {
+      return NextResponse.json({
+        success: false,
+        message: 'You can only accept offers on your own listings'
+      }, { status: 403 });
+    }
+
+    // Check listing status
+    if (listing.status !== 'active') {
+      return NextResponse.json({
+        success: false,
+        message: 'This listing is no longer active'
+      }, { status: 400 });
+    }
+
+    // Get offer
+    const { data: offer, error: offerError } = await supabase
+      .from('trade_offers')
+      .select('*')
+      .eq('id', parseInt(offerId))
+      .eq('listing_id', listing.id)
+      .single();
+
+    if (offerError || !offer) {
+      console.error('Offer error:', offerError);
+      return NextResponse.json({
+        success: false,
+        message: 'Offer not found',
+        error: offerError?.message
+      }, { status: 404 });
+    }
+
+    // Check offer status
+    if (offer.status !== 'pending') {
+      return NextResponse.json({
+        success: false,
+        message: 'This offer has already been processed'
+      }, { status: 400 });
+    }
+
+    const now = new Date().toISOString();
+
+    // === FIX: Properly handle offer_images ===
+    let offerImages = offer.images;
+    
+    if (offerImages && typeof offerImages === 'string') {
+      try {
+        const parsed = JSON.parse(offerImages);
+        offerImages = JSON.stringify(parsed);
+      } catch (e) {
+        console.warn('Invalid JSON in offer.images, setting to null:', e);
+        offerImages = null;
       }
+    }
+    else if (offerImages && typeof offerImages === 'object') {
+      offerImages = JSON.stringify(offerImages);
+    }
+    else if (!offerImages) {
+      offerImages = null;
+    }
 
-      console.log('Found listing:', { id: listing.id, userId: listing.user_id });
+    // Accept the offer
+    const { error: updateOfferError } = await supabase
+      .from('trade_offers')
+      .update({ status: 'accepted', accepted_at: now, updated_at: now })
+      .eq('id', parseInt(offerId));
 
-      // Verify that the current user is the owner of the listing
-      if (listing.user_id !== decoded.id) {
-        await trx.rollback();
-        return NextResponse.json({
-          success: false,
-          message: 'You can only accept offers on your own listings'
-        }, { status: 403 });
-      }
+    if (updateOfferError) {
+      console.error('Error updating offer:', updateOfferError);
+      return NextResponse.json({
+        success: false,
+        message: 'Failed to accept offer',
+        error: updateOfferError.message
+      }, { status: 500 });
+    }
 
-      // Check if listing is still active
-      if (listing.status !== 'active') {
-        await trx.rollback();
-        return NextResponse.json({
-          success: false,
-          message: 'This listing is no longer active'
-        }, { status: 400 });
-      }
+    // Reject other offers
+    await supabase
+      .from('trade_offers')
+      .update({ status: 'rejected', updated_at: now })
+      .eq('listing_id', listing.id)
+      .neq('id', parseInt(offerId))
+      .eq('status', 'pending');
 
-      // Get the offer with user information
-      const offer = await trx('trade_offers')
-        .select([
-          'trade_offers.*',
-          'users.username as buyer_username',
-          'users.first_name as buyer_first_name',
-          'users.last_name as buyer_last_name',
-          'users.avatar_url as buyer_avatar_url'
-        ])
-        .leftJoin('users', 'trade_offers.user_id', 'users.id')
-        .where('trade_offers.id', parseInt(offerId))
-        .where('trade_offers.listing_id', listing.id)
-        .first();
-
-      if (!offer) {
-        await trx.rollback();
-        return NextResponse.json({
-          success: false,
-          message: 'Offer not found'
-        }, { status: 404 });
-      }
-
-      console.log('Found offer:', { id: offer.id, status: offer.status });
-
-      // Check if offer is still pending
-      if (offer.status !== 'pending') {
-        await trx.rollback();
-        return NextResponse.json({
-          success: false,
-          message: 'This offer has already been processed'
-        }, { status: 400 });
-      }
-
-      // Accept the offer
-      await trx('trade_offers')
-        .where('id', parseInt(offerId))
-        .update({
-          status: 'accepted',
-          updated_at: trx.fn.now()
-        });
-
-      // Reject all other pending offers for this listing
-      await trx('trade_offers')
-        .where('listing_id', listing.id)
-        .where('id', '!=', parseInt(offerId))
-        .where('status', 'pending')
-        .update({
-          status: 'rejected',
-          updated_at: trx.fn.now()
-        });
-
-      // Create a trade record when an offer is accepted
-      const tradeData = {
+    // Create trade with offer images
+    const { data: tradeResult, error: tradeError } = await supabase
+      .from('trades')
+      .insert({
         offer_id: parseInt(offerId),
         listing_id: listing.id,
         buyer_id: offer.user_id,
@@ -143,97 +153,107 @@ export async function POST(request, { params }) {
         status: 'accepted',
         offer_message: offer.message || '',
         offer_amount: offer.amount || null,
-        offer_images: offer.images ? JSON.stringify(offer.images) : JSON.stringify([]),
+        offer_images: offerImages,
         meeting_location: offer.meeting_location || null,
         proposed_meeting_time: offer.proposed_time || null,
-        created_at: trx.fn.now(),
-        accepted_at: trx.fn.now(),
-        updated_at: trx.fn.now()
-      };
+        created_at: now,
+        accepted_at: now,
+        updated_at: now
+      })
+      .select('id')
+      .single();
 
-      const [tradeResult] = await trx('trades')
-        .insert(tradeData)
-        .returning('id');
-
-      const tradeId = tradeResult?.id || tradeResult;
-
-      console.log('Trade created with ID:', tradeId);
-
-      // Update the listing to mark that an offer was accepted (optional)
-      await trx('trade_listings')
-        .where('id', listing.id)
-        .update({
-          accepted_offer_id: parseInt(offerId),
-          updated_at: trx.fn.now()
-        });
-
-      // Get seller information for the response
-      const seller = await trx('users')
-        .select('username', 'first_name', 'last_name', 'avatar_url')
-        .where('id', listing.user_id)
-        .first();
-
-      // Commit the transaction
-      await trx.commit();
-
-      console.log('Offer accepted successfully, trade created');
-
-      // Format names properly - combine first_name and last_name or fallback to username
-      const buyerName = `${offer.buyer_first_name || ''} ${offer.buyer_last_name || ''}`.trim() || offer.buyer_username;
-      const sellerName = `${seller.first_name || ''} ${seller.last_name || ''}`.trim() || seller.username;
-
+    if (tradeError) {
+      console.error('Error creating trade:', tradeError);
+      
+      // Rollback
+      await supabase
+        .from('trade_offers')
+        .update({ status: 'pending', accepted_at: null, updated_at: now })
+        .eq('id', parseInt(offerId));
+      
       return NextResponse.json({
-        success: true,
-        message: 'Offer accepted successfully and trade created',
-        data: {
-          id: tradeId,
-          offer_id: parseInt(offerId),
-          listing_id: listing.id,
-          buyer_id: offer.user_id,
-          seller_id: listing.user_id,
-          status: 'accepted',
-          offer_message: offer.message || '',
-          offer_images: (() => {
-            try {
-              return offer.images ? JSON.parse(offer.images) : [];
-            } catch (e) {
-              console.error('Error parsing offer_images:', e);
-              return [];
-            }
-          })(),
-          created_at: new Date().toISOString(),
-          accepted_at: new Date().toISOString(),
-          buyer: {
-            username: offer.buyer_username,
-            name: buyerName,
-            first_name: offer.buyer_first_name,
-            last_name: offer.buyer_last_name,
-            avatar_url: offer.buyer_avatar_url
-          },
-          seller: {
-            username: seller.username,
-            name: sellerName,
-            first_name: seller.first_name,
-            last_name: seller.last_name,
-            avatar_url: seller.avatar_url
-          },
-          listing: {
-            title: listing.title
-          }
-        }
-      }, { status: 201 });
-
-    } catch (error) {
-      await trx.rollback();
-      throw error;
+        success: false,
+        message: 'Failed to create trade',
+        error: tradeError.message,
+        details: tradeError
+      }, { status: 500 });
     }
+
+    // Update listing
+    const { error: listingUpdateError } = await supabase
+      .from('trade_listings')
+      .update({ 
+        accepted_offer_id: parseInt(offerId), 
+        status: 'traded',
+        updated_at: now 
+      })
+      .eq('id', listing.id);
+
+    if (listingUpdateError) {
+      console.error('Error updating listing:', listingUpdateError);
+    }
+
+    // Get user info
+    const [{ data: buyerUser }, { data: seller }] = await Promise.all([
+      supabase.from('users').select('username, first_name, last_name, avatar_url').eq('id', offer.user_id).single(),
+      supabase.from('users').select('username, first_name, last_name, avatar_url').eq('id', listing.user_id).single()
+    ]);
+
+    const buyerName = `${buyerUser?.first_name || ''} ${buyerUser?.last_name || ''}`.trim() || buyerUser?.username;
+    const sellerName = `${seller?.first_name || ''} ${seller?.last_name || ''}`.trim() || seller?.username;
+
+    // Parse images for response
+    let parsedImages = [];
+    if (offerImages) {
+      try {
+        parsedImages = JSON.parse(offerImages);
+      } catch (e) {
+        parsedImages = [];
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Offer accepted successfully and trade created',
+      data: {
+        id: tradeResult.id,
+        offer_id: parseInt(offerId),
+        listing_id: listing.id,
+        buyer_id: offer.user_id,
+        seller_id: listing.user_id,
+        status: 'accepted',
+        offer_message: offer.message || '',
+        offer_images: parsedImages,
+        created_at: now,
+        accepted_at: now,
+        buyer: {
+          username: buyerUser?.username,
+          name: buyerName,
+          first_name: buyerUser?.first_name,
+          last_name: buyerUser?.last_name,
+          avatar_url: buyerUser?.avatar_url
+        },
+        seller: {
+          username: seller?.username,
+          name: sellerName,
+          first_name: seller?.first_name,
+          last_name: seller?.last_name,
+          avatar_url: seller?.avatar_url
+        },
+        listing: {
+          title: listing.title
+        }
+      }
+    }, { status: 201 });
 
   } catch (error) {
     console.error('Error accepting offer:', error);
     return NextResponse.json({
       success: false,
       message: 'Failed to accept offer',
-      error: error.message
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     }, { status: 500 });
   }
 }

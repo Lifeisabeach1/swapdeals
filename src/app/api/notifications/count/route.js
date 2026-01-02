@@ -1,38 +1,49 @@
-
+// ============================================
 // app/api/notifications/count/route.js
+// ============================================
+
 import { NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
+import { verifyToken } from '@/lib/auth/jwt';
 
 export async function GET(request) {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '');
-    
-    if (!token) {
-      return NextResponse.json({ error: 'No token provided' }, { status: 401 });
+    // Verify auth
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ 
+        error: 'Authorization required' 
+      }, { status: 401 });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = decoded; // or extract user info as needed
-    
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const token = authHeader.substring(7);
+    const decoded = verifyToken(token);
+
+    if (!decoded) {
+      return NextResponse.json({ 
+        error: 'Invalid or expired token' 
+      }, { status: 401 });
     }
 
-    const count = await NotificationService.getUnreadCount(user.id);
+    // TODO: Implement actual notification count query
+    // Example with Supabase:
+    // const { count } = await supabase
+    //   .from('notifications')
+    //   .select('*', { count: 'exact', head: true })
+    //   .eq('user_id', decoded.id)
+    //   .is('read_at', null);
+
+    const count = 0; // Placeholder
 
     return NextResponse.json({
       success: true,
       data: { count }
     });
+
   } catch (error) {
-    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
-      return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
-    }
-    
     console.error('Error fetching notification count:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch notification count' },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      success: false,
+      error: 'Failed to fetch notification count'
+    }, { status: 500 });
   }
 }

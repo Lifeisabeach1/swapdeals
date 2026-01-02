@@ -1,8 +1,8 @@
-// app/api/testimonials/route.js - Main testimonials routes
-import { knex } from '@/lib/db/index.js';
+// app/api/testimonials/route.js
 import { NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase';
 
-// GET all testimonials
+// GET - Public testimonials
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -10,112 +10,108 @@ export async function GET(request) {
     const offset = parseInt(searchParams.get('offset')) || 0;
     const includeInactive = searchParams.get('include_inactive') === 'true';
 
-    let query = knex('testimonials')
-      .select([
-        'id',
-        'name',
-        'location',
-        'text',
-        'avatar',
-        'rating',
-        'bg_color as bgColor',
-        'is_verified as isVerified',
-        'created_at as createdAt'
-      ])
-      .orderBy('created_at', 'desc')
-      .limit(limit)
-      .offset(offset);
+    let query = supabase
+      .from('testimonials')
+      .select('id, name, location, text, avatar, rating, bg_color, is_verified, created_at')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (!includeInactive) {
-      query = query.where('is_active', true);
+      query = query.eq('is_active', true);
     }
 
-    const testimonials = await query;
+    const { data: testimonials, error } = await query;
 
-    // Get total count for pagination
-    const totalQuery = knex('testimonials').count('* as count');
-    if (!includeInactive) {
-      totalQuery.where('is_active', true);
+    if (error) {
+      return NextResponse.json({ error: 'Failed to fetch testimonials' }, { status: 500 });
     }
-    const [{ count }] = await totalQuery;
+
+    // Get count
+    let countQuery = supabase.from('testimonials').select('*', { count: 'exact', head: true });
+    if (!includeInactive) countQuery = countQuery.eq('is_active', true);
+    const { count } = await countQuery;
+
+    // Transform to camelCase
+    const transformed = testimonials.map(t => ({
+      id: t.id,
+      name: t.name,
+      location: t.location,
+      text: t.text,
+      avatar: t.avatar,
+      rating: t.rating,
+      bgColor: t.bg_color,
+      isVerified: t.is_verified,
+      createdAt: t.created_at
+    }));
 
     return NextResponse.json({
-      testimonials,
+      testimonials: transformed,
       pagination: {
-        total: parseInt(count),
+        total: count || 0,
         limit,
         offset,
-        hasMore: offset + limit < parseInt(count)
+        hasMore: offset + limit < (count || 0)
       }
     });
 
   } catch (error) {
     console.error('Error fetching testimonials:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch testimonials' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch testimonials' }, { status: 500 });
   }
 }
 
-// POST new testimonial
+// POST - Create testimonial
 export async function POST(request) {
   try {
     const body = await request.json();
     const { name, location, text, avatar, rating, bgColor } = body;
 
-    // Validation
     if (!name || !location || !text || !avatar || !rating || !bgColor) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
     if (rating < 1 || rating > 5) {
-      return NextResponse.json(
-        { error: 'Rating must be between 1 and 5' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Rating must be 1-5' }, { status: 400 });
     }
 
-    // Sanitize inputs
-    const sanitizedData = {
-      name: name.trim().substring(0, 100),
-      location: location.trim().substring(0, 100),
-      text: text.trim().substring(0, 1000),
-      avatar: avatar.trim(),
-      rating: parseInt(rating),
-      bg_color: bgColor.trim(),
-      is_verified: false, // New testimonials start unverified
-      is_active: true
-    };
+    const { data, error } = await supabase
+      .from('testimonials')
+      .insert([{
+        name: name.trim().substring(0, 100),
+        location: location.trim().substring(0, 100),
+        text: text.trim().substring(0, 1000),
+        avatar: avatar.trim(),
+        rating: parseInt(rating),
+        bg_color: bgColor.trim(),
+        is_verified: false,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }])
+      .select('id, name, location, text, avatar, rating, bg_color, is_verified, created_at')
+      .single();
 
-    // Insert into database
-    const [newTestimonial] = await knex('testimonials')
-      .insert(sanitizedData)
-      .returning([
-        'id',
-        'name',
-        'location',
-        'text',
-        'avatar',
-        'rating',
-        'bg_color as bgColor',
-        'is_verified as isVerified',
-        'created_at as createdAt'
-      ]);
+    if (error) {
+      return NextResponse.json({ error: 'Failed to create testimonial' }, { status: 500 });
+    }
 
     return NextResponse.json({
-      message: 'Testimonial created successfully',
-      testimonial: newTestimonial
+      message: 'Testimonial created',
+      testimonial: {
+        id: data.id,
+        name: data.name,
+        location: data.location,
+        text: data.text,
+        avatar: data.avatar,
+        rating: data.rating,
+        bgColor: data.bg_color,
+        isVerified: data.is_verified,
+        createdAt: data.created_at
+      }
     }, { status: 201 });
 
   } catch (error) {
     console.error('Error creating testimonial:', error);
-    return NextResponse.json(
-      { error: 'Failed to create testimonial' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to create testimonial' }, { status: 500 });
   }
 }

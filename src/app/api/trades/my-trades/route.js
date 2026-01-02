@@ -1,59 +1,52 @@
-// src/app/api/trades/my-trades/route.js
+// app/api/trades/my-trades/route.js
 import { NextResponse } from 'next/server';
-import { knex } from '@/lib/db/index.js';
-import jwt from 'jsonwebtoken';
+import { headers } from 'next/headers';
+import { verifyToken } from '@/lib/auth/jwt';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(request) {
   try {
-    // Get auth token
-    const authHeader = request.headers.get('authorization');
+    // Verify auth med headers()
+    const headersList = await headers();
+    const authHeader = headersList.get('authorization');
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ 
         success: false, 
-        message: 'Authorization token required' 
+        message: 'Authorization required' 
       }, { status: 401 });
     }
 
     const token = authHeader.substring(7);
+    const decoded = verifyToken(token);
 
-    // Verify token and get user
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (tokenError) {
-      console.error('Token verification failed:', tokenError);
+    if (!decoded) {
       return NextResponse.json({ 
         success: false, 
         message: 'Invalid or expired token' 
       }, { status: 401 });
     }
 
-    const userId = decoded.id;
+    // Get trades where user is buyer or seller
+    const { data: trades, error } = await supabase
+      .from('trades')
+      .select(`
+        *,
+        buyer:buyer_id (id, username, first_name, last_name, avatar_url),
+        seller:seller_id (id, username, first_name, last_name, avatar_url),
+        trade_listings!inner (id, title)
+      `)
+      .or(`buyer_id.eq.${decoded.id},seller_id.eq.${decoded.id}`)
+      .order('created_at', { ascending: false });
 
-    // Query to get all trades where user is either buyer or seller
-    const trades = await knex('trades')
-      .select([
-        'trades.*',
-        'buyer.username as buyer_username',
-        'buyer.first_name as buyer_first_name',
-        'buyer.last_name as buyer_last_name',
-        'buyer.avatar_url as buyer_avatar_url',
-        'seller.username as seller_username',
-        'seller.first_name as seller_first_name',
-        'seller.last_name as seller_last_name',
-        'seller.avatar_url as seller_avatar_url',
-        'trade_listings.title as listing_title'
-      ])
-      .leftJoin('users as buyer', 'trades.buyer_id', 'buyer.id')
-      .leftJoin('users as seller', 'trades.seller_id', 'seller.id')
-      .leftJoin('trade_listings', 'trades.listing_id', 'trade_listings.id')
-      .where(function() {
-        this.where('trades.buyer_id', userId).orWhere('trades.seller_id', userId);
-      })
-      .orderBy('trades.created_at', 'desc');
+    if (error) {
+      console.error('Error fetching trades:', error);
+      return NextResponse.json({
+        success: false,
+        message: 'Failed to fetch trades'
+      }, { status: 500 });
+    }
 
-    // If no trades found, return empty array instead of 404
     if (!trades || trades.length === 0) {
       return NextResponse.json({
         success: true,
@@ -61,10 +54,22 @@ export async function GET(request) {
       });
     }
 
-    // Format the trades data
+    // Parse offer images helper
+    const parseOfferImages = (images) => {
+      if (!images || typeof images !== 'string' || images.trim() === '' || images.trim() === 'null') {
+        return [];
+      }
+      try {
+        return JSON.parse(images);
+      } catch {
+        return [];
+      }
+    };
+
+    // Format trades
     const formattedTrades = trades.map(trade => {
-      const buyerName = `${trade.buyer_first_name || ''} ${trade.buyer_last_name || ''}`.trim() || trade.buyer_username;
-      const sellerName = `${trade.seller_first_name || ''} ${trade.seller_last_name || ''}`.trim() || trade.seller_username;
+      const buyerName = `${trade.buyer?.first_name || ''} ${trade.buyer?.last_name || ''}`.trim() || trade.buyer?.username;
+      const sellerName = `${trade.seller?.first_name || ''} ${trade.seller?.last_name || ''}`.trim() || trade.seller?.username;
 
       return {
         id: trade.id,
@@ -74,21 +79,7 @@ export async function GET(request) {
         seller_id: trade.seller_id,
         status: trade.status,
         offer_message: trade.offer_message,
-        offer_images: (() => {
-          try {
-            // Handle various cases: null, empty string, whitespace, malformed JSON
-            if (!trade.offer_images || 
-                typeof trade.offer_images !== 'string' || 
-                trade.offer_images.trim() === '' ||
-                trade.offer_images.trim() === 'null') {
-              return [];
-            }
-            return JSON.parse(trade.offer_images);
-          } catch (e) {
-            console.error('Error parsing offer_images for trade', trade.id, ':', e.message, 'Raw value:', trade.offer_images);
-            return [];
-          }
-        })(),
+        offer_images: parseOfferImages(trade.offer_images),
         offer_amount: trade.offer_amount,
         meeting_location: trade.meeting_location,
         proposed_meeting_time: trade.proposed_meeting_time,
@@ -114,28 +105,28 @@ export async function GET(request) {
         disputed_by: trade.disputed_by,
         updated_at: trade.updated_at,
         buyer: {
-          username: trade.buyer_username,
+          username: trade.buyer?.username,
           name: buyerName,
-          first_name: trade.buyer_first_name,
-          last_name: trade.buyer_last_name,
-          avatar_url: trade.buyer_avatar_url
+          first_name: trade.buyer?.first_name,
+          last_name: trade.buyer?.last_name,
+          avatar_url: trade.buyer?.avatar_url
         },
         seller: {
-          username: trade.seller_username,
+          username: trade.seller?.username,
           name: sellerName,
-          first_name: trade.seller_first_name,
-          last_name: trade.seller_last_name,
-          avatar_url: trade.seller_avatar_url
+          first_name: trade.seller?.first_name,
+          last_name: trade.seller?.last_name,
+          avatar_url: trade.seller?.avatar_url
         },
         listing: {
-          title: trade.listing_title
+          title: trade.trade_listings?.title
         },
-        // Add these for frontend compatibility
-        listing_title: trade.listing_title,
-        buyer_first_name: trade.buyer_first_name,
-        buyer_username: trade.buyer_username,
-        seller_first_name: trade.seller_first_name,
-        seller_username: trade.seller_username
+        // Frontend compatibility
+        listing_title: trade.trade_listings?.title,
+        buyer_first_name: trade.buyer?.first_name,
+        buyer_username: trade.buyer?.username,
+        seller_first_name: trade.seller?.first_name,
+        seller_username: trade.seller?.username
       };
     });
 
@@ -145,11 +136,10 @@ export async function GET(request) {
     });
 
   } catch (error) {
-    console.error('Error fetching user trades:', error);
+    console.error('Error fetching trades:', error);
     return NextResponse.json({
       success: false,
-      message: 'Failed to fetch trades',
-      error: error.message
+      message: 'Failed to fetch trades'
     }, { status: 500 });
   }
 }

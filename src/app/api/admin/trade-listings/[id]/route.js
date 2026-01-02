@@ -1,112 +1,202 @@
-// src/app/api/admin/trade-listings/[id]/route.js
+// ============================================================================
+// FILE 2: app/api/admin/trade-listings/[id]/route.js
+// Single trade listing operations (WITH ADMIN AUTH)
+// ============================================================================
 import { NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/middleware/auth';
-import { knex } from '@/lib/db/index.js';
+import { supabase } from '@/lib/supabase';
+import { verifyToken } from '@/lib/auth/jwt';
 
-export const GET = requireAdmin(async (request, { params }) => {
+// Helper function to verify admin
+async function verifyAdmin(request) {
+  const authHeader = request.headers.get('authorization');
+  
+  if (!authHeader?.startsWith('Bearer ')) {
+    return { error: 'Authorization required', status: 401 };
+  }
+
+  const token = authHeader.substring(7);
+  const decoded = verifyToken(token);
+
+  if (!decoded) {
+    return { error: 'Invalid or expired token', status: 401 };
+  }
+
+  // Check if user has admin role
+  if (decoded.role !== 'admin') {
+    return { error: 'Admin access required', status: 403 };
+  }
+
+  return { user: decoded };
+}
+
+// GET - Get single listing (public - no auth needed)
+export async function GET(request, { params }) {
   try {
     const { id } = params;
-
     if (!id || isNaN(parseInt(id))) {
-      return NextResponse.json({ error: 'Invalid listing ID' }, { status: 400 });
+      return NextResponse.json({ 
+        success: false,
+        error: 'Invalid listing ID' 
+      }, { status: 400 });
     }
 
     const listingId = parseInt(id);
 
-    // Get specific trade listing
-    const listing = await knex('trade_listings as tl')
-      .leftJoin('users as u', 'tl.user_id', 'u.id')
-      .leftJoin('trade_listing_views as tlv', 'tl.id', 'tlv.listing_id')
-      .select([
-        'tl.*',
-        'u.username as user_name',
-        'u.email as user_email',
-        'u.name as user_full_name',
-        knex.raw('COUNT(tlv.id) as views')
-      ])
-      .where('tl.id', listingId)
-      .groupBy(['tl.id', 'u.id'])
-      .first();
+    const { data: listing, error: listingError } = await supabase
+      .from('trade_listings')
+      .select(`
+        *,
+        users!inner (
+          id,
+          username,
+          email,
+          phone,
+          bio,
+          location,
+          created_at,
+          avatar_url
+        )
+      `)
+      .eq('id', listingId)
+      .single();
 
-    if (!listing) {
-      return NextResponse.json({ error: 'Trade listing not found' }, { status: 404 });
+    if (listingError) {
+      if (listingError.code === 'PGRST116') {
+        return NextResponse.json({ 
+          success: false,
+          error: 'Trade listing not found' 
+        }, { status: 404 });
+      }
+      throw listingError;
     }
+
+    const [
+      { data: items },
+      { data: images },
+      { count: viewsCount }
+    ] = await Promise.all([
+      supabase.from('trade_items').select('*').eq('listing_id', listingId),
+      supabase.from('images').select('*').eq('listing_id', listingId),
+      supabase.from('trade_listing_views').select('*', { count: 'exact', head: true }).eq('listing_id', listingId)
+    ]);
+
+    const formattedListing = {
+      ...listing,
+      items: items || [],
+      images: images || [],
+      views: viewsCount || 0,
+      seller: {
+        id: listing.users.id,
+        name: listing.users.username,
+        email: listing.users.email,
+        phone: listing.users.phone,
+        bio: listing.users.bio,
+        location: listing.users.location,
+        joinedDate: listing.users.created_at,
+        avatar: listing.users.avatar_url
+      }
+    };
+
+    delete formattedListing.users;
 
     return NextResponse.json({
       success: true,
-      listing
+      data: formattedListing
     });
 
   } catch (error) {
     console.error('Trade listing API error:', error);
     return NextResponse.json({
-      error: 'Internal server error',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      success: false,
+      error: 'Failed to fetch trade listing'
     }, { status: 500 });
   }
-});
+}
 
-export const PUT = requireAdmin(async (request, { params }) => {
+// PUT - Update listing (REQUIRES ADMIN AUTH)
+export async function PUT(request, { params }) {
+  // Verify admin access
+  const authCheck = await verifyAdmin(request);
+  if (authCheck.error) {
+    return NextResponse.json({ 
+      success: false, 
+      error: authCheck.error 
+    }, { status: authCheck.status });
+  }
+
   try {
     const { id } = params;
-
     if (!id || isNaN(parseInt(id))) {
-      return NextResponse.json({ error: 'Invalid listing ID' }, { status: 400 });
+      return NextResponse.json({ 
+        success: false,
+        error: 'Invalid listing ID' 
+      }, { status: 400 });
     }
 
     const listingId = parseInt(id);
-    const { title, description, category, location, status } = await request.json();
+    const body = await request.json();
+    const { title, description, category, location, status } = body;
 
-    if (!title || title.trim().length === 0) {
-      return NextResponse.json({ error: 'Title is required' }, { status: 400 });
+    if (title && title.trim().length === 0) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'Title cannot be empty' 
+      }, { status: 400 });
     }
 
-    // Validate status
-    const validStatuses = ['active', 'inactive', 'completed', 'cancelled'];
+    const validStatuses = ['active', 'in_progress', 'completed', 'cancelled'];
     if (status && !validStatuses.includes(status)) {
-      return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+      return NextResponse.json({ 
+        success: false,
+        error: 'Invalid status value' 
+      }, { status: 400 });
     }
 
-    // Check if listing exists
-    const existingListing = await knex('trade_listings')
-      .select('id', 'user_id')
-      .where('id', listingId)
-      .first();
+    const { data: existingListing, error: fetchError } = await supabase
+      .from('trade_listings')
+      .select('id, user_id, status, title')
+      .eq('id', listingId)
+      .single();
 
-    if (!existingListing) {
-      return NextResponse.json({ error: 'Trade listing not found' }, { status: 404 });
+    if (fetchError) {
+      if (fetchError.code === 'PGRST116') {
+        return NextResponse.json({ 
+          success: false,
+          error: 'Trade listing not found' 
+        }, { status: 404 });
+      }
+      throw fetchError;
     }
 
-    // Update the listing
-    await knex('trade_listings')
-      .where('id', listingId)
-      .update({
-        title: title.trim(),
-        description: description?.trim() || null,
-        category: category?.trim() || null,
-        location: location?.trim() || null,
-        status: status || 'active',
-        updated_at: knex.fn.now()
-      });
+    const updateData = { updated_at: new Date().toISOString() };
+    if (title !== undefined) updateData.title = title.trim();
+    if (description !== undefined) updateData.description = description?.trim() || null;
+    if (category !== undefined) updateData.category = category?.trim() || null;
+    if (location !== undefined) updateData.location = location?.trim() || null;
+    if (status !== undefined) updateData.status = status;
 
-    // Log the admin action (only if admin_actions table exists)
+    const { error: updateError } = await supabase
+      .from('trade_listings')
+      .update(updateData)
+      .eq('id', listingId);
+
+    if (updateError) throw updateError;
+
+    // Log admin action
     try {
-      await knex('admin_actions').insert({
-        admin_id: request.user.id,
+      await supabase.from('admin_actions').insert({
+        admin_id: authCheck.user.id,
         action_type: 'update',
         target_type: 'trade_listing',
         target_id: listingId,
         details: JSON.stringify({
-          title: title.trim(),
-          description: description?.trim(),
-          category: category?.trim(),
-          location: location?.trim(),
-          status: status || 'active'
+          old_status: existingListing.status,
+          updates: updateData
         }),
-        created_at: knex.fn.now()
+        created_at: new Date().toISOString()
       });
     } catch (logError) {
-      console.warn('Could not log admin action:', logError.message);
+      console.warn('Could not log admin action:', logError);
     }
 
     return NextResponse.json({
@@ -115,88 +205,81 @@ export const PUT = requireAdmin(async (request, { params }) => {
     });
 
   } catch (error) {
-    console.error('Trade listing API error:', error);
+    console.error('Update listing error:', error);
     return NextResponse.json({
-      error: 'Internal server error',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      success: false,
+      error: 'Failed to update trade listing'
     }, { status: 500 });
   }
-});
+}
 
-export const DELETE = requireAdmin(async (request, { params }) => {
+// DELETE - Delete listing (REQUIRES ADMIN AUTH)
+export async function DELETE(request, { params }) {
+  // Verify admin access
+  const authCheck = await verifyAdmin(request);
+  if (authCheck.error) {
+    return NextResponse.json({ 
+      success: false, 
+      error: authCheck.error 
+    }, { status: authCheck.status });
+  }
+
   try {
     const { id } = params;
-
     if (!id || isNaN(parseInt(id))) {
-      return NextResponse.json({ error: 'Invalid listing ID' }, { status: 400 });
+      return NextResponse.json({ 
+        success: false,
+        error: 'Invalid listing ID' 
+      }, { status: 400 });
     }
 
     const listingId = parseInt(id);
 
-    // Check if listing exists
-    const existingListing = await knex('trade_listings')
-      .select('id', 'user_id')
-      .where('id', listingId)
-      .first();
+    const { data: existingListing, error: fetchError } = await supabase
+      .from('trade_listings')
+      .select('id, user_id, title')
+      .eq('id', listingId)
+      .single();
 
-    if (!existingListing) {
-      return NextResponse.json({ error: 'Trade listing not found' }, { status: 404 });
+    if (fetchError) {
+      if (fetchError.code === 'PGRST116') {
+        return NextResponse.json({ 
+          success: false,
+          error: 'Trade listing not found' 
+        }, { status: 404 });
+      }
+      throw fetchError;
     }
 
-    // Check which related tables exist before starting transaction
-    const tableChecks = await Promise.allSettled([
-      knex.raw("SELECT to_regclass('trade_inquiries')").then(result => ({ 
-        table: 'trade_inquiries', 
-        exists: result.rows[0].to_regclass !== null 
-      })),
-      knex.raw("SELECT to_regclass('trade_favorites')").then(result => ({ 
-        table: 'trade_favorites', 
-        exists: result.rows[0].to_regclass !== null 
-      })),
-      knex.raw("SELECT to_regclass('admin_actions')").then(result => ({ 
-        table: 'admin_actions', 
-        exists: result.rows[0].to_regclass !== null 
-      }))
+    await Promise.allSettled([
+      supabase.from('trade_items').delete().eq('listing_id', listingId),
+      supabase.from('images').delete().eq('listing_id', listingId),
+      supabase.from('trade_listing_views').delete().eq('listing_id', listingId)
     ]);
 
-    const existingTables = tableChecks
-      .filter(check => check.status === 'fulfilled')
-      .map(check => check.value)
-      .filter(table => table.exists)
-      .map(table => table.table);
+    const { error: deleteError } = await supabase
+      .from('trade_listings')
+      .delete()
+      .eq('id', listingId);
 
-    console.log('Existing related tables:', existingTables);
+    if (deleteError) throw deleteError;
 
-    // Use transaction to ensure data integrity
-    await knex.transaction(async (trx) => {
-      // Delete related records first (only for tables that exist)
-      if (existingTables.includes('trade_inquiries')) {
-        await trx('trade_inquiries').where('listing_id', listingId).del();
-        console.log('Deleted from trade_inquiries');
-      }
-      
-      if (existingTables.includes('trade_favorites')) {
-        await trx('trade_favorites').where('listing_id', listingId).del();
-        console.log('Deleted from trade_favorites');
-      }
-      
-      // Delete the listing
-      await trx('trade_listings').where('id', listingId).del();
-      console.log('Deleted trade listing');
-
-      // Log the admin action (only if admin_actions table exists)
-      if (existingTables.includes('admin_actions')) {
-        await trx('admin_actions').insert({
-          admin_id: request.user.id,
-          action_type: 'delete',
-          target_type: 'trade_listing',
-          target_id: listingId,
-          details: JSON.stringify({ deleted_by_admin: true }),
-          created_at: knex.fn.now()
-        });
-        console.log('Logged admin action');
-      }
-    });
+    // Log admin action
+    try {
+      await supabase.from('admin_actions').insert({
+        admin_id: authCheck.user.id,
+        action_type: 'delete',
+        target_type: 'trade_listing',
+        target_id: listingId,
+        details: JSON.stringify({
+          title: existingListing.title,
+          deleted_by_admin: true
+        }),
+        created_at: new Date().toISOString()
+      });
+    } catch (logError) {
+      console.warn('Could not log admin action:', logError);
+    }
 
     return NextResponse.json({
       success: true,
@@ -204,10 +287,10 @@ export const DELETE = requireAdmin(async (request, { params }) => {
     });
 
   } catch (error) {
-    console.error('Trade listing API error:', error);
+    console.error('Delete listing error:', error);
     return NextResponse.json({
-      error: 'Internal server error',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      success: false,
+      error: 'Failed to delete trade listing'
     }, { status: 500 });
   }
-});
+}

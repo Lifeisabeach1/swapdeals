@@ -10,16 +10,26 @@ const Alert = ({
   title = null 
 }) => {
   const [show, setShow] = useState(isVisible);
+  const [isAnimating, setIsAnimating] = useState(false);
 
   useEffect(() => {
-    setShow(isVisible);
+    if (isVisible) {
+      setShow(true);
+      setTimeout(() => setIsAnimating(true), 10);
+    } else {
+      setIsAnimating(false);
+      setTimeout(() => setShow(false), 300);
+    }
   }, [isVisible]);
 
   useEffect(() => {
     if (show && duration > 0) {
       const timer = setTimeout(() => {
-        setShow(false);
-        setTimeout(() => onClose?.(), 300); // Wait for animation to complete
+        setIsAnimating(false);
+        setTimeout(() => {
+          setShow(false);
+          onClose?.();
+        }, 300);
       }, duration);
       
       return () => clearTimeout(timer);
@@ -28,14 +38,20 @@ const Alert = ({
 
   const handleBackdropClick = (e) => {
     if (e.target === e.currentTarget) {
-      setShow(false);
-      setTimeout(() => onClose?.(), 300);
+      setIsAnimating(false);
+      setTimeout(() => {
+        setShow(false);
+        onClose?.();
+      }, 300);
     }
   };
 
   const handleClose = () => {
-    setShow(false);
-    setTimeout(() => onClose?.(), 300);
+    setIsAnimating(false);
+    setTimeout(() => {
+      setShow(false);
+      onClose?.();
+    }, 300);
   };
 
   const getAlertConfig = () => {
@@ -130,101 +146,71 @@ const Alert = ({
   const config = getAlertConfig();
 
   return (
-    <>
-      <style jsx>{`
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px) scale(0.95);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
-        }
-        
-        @keyframes slideDown {
-          from {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
-          to {
-            opacity: 0;
-            transform: translateY(-20px) scale(0.95);
-          }
-        }
-        
-        .alert-enter {
-          animation: slideUp 0.3s ease-out;
-        }
-        
-        .alert-exit {
-          animation: slideDown 0.3s ease-in;
-        }
-      `}</style>
-      
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4"
+      onClick={handleBackdropClick}
+    >
       <div 
-        className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4"
-        onClick={handleBackdropClick}
+        className={`bg-white rounded-2xl shadow-2xl w-full max-w-md transform transition-all duration-300 ease-out ${
+          isAnimating 
+            ? 'opacity-100 translate-y-0 scale-100' 
+            : 'opacity-0 translate-y-5 scale-95'
+        }`}
+        style={{
+          background: config.gradient,
+          boxShadow: config.boxShadow,
+        }}
       >
-        <div 
-          className={`bg-white rounded-2xl shadow-2xl w-full max-w-md transform alert-enter`}
-          style={{
-            background: config.gradient,
-            boxShadow: config.boxShadow,
-          }}
-        >
-          {/* Close button */}
-          <div className="absolute top-4 right-4">
-            <button
-              onClick={handleClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+        {/* Close button */}
+        <div className="absolute top-4 right-4">
+          <button
+            onClick={handleClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
 
-          {/* Icon */}
-          <div className="text-center pt-8 pb-4">
-            <div 
-              className={`inline-flex items-center justify-center w-16 h-16 ${config.iconBg} rounded-full mx-auto mb-4`}
-              style={{
-                boxShadow: config.iconShadow
-              }}
-            >
-              {config.icon}
-            </div>
-            
-            <h3 className={`text-xl font-bold ${config.titleColor} mb-2`}>
-              {title || getDefaultTitle()}
-            </h3>
-            <p className={`${config.messageColor} px-6 leading-relaxed`}>
-              {message}
-            </p>
+        {/* Icon */}
+        <div className="text-center pt-8 pb-4">
+          <div 
+            className={`inline-flex items-center justify-center w-16 h-16 ${config.iconBg} rounded-full mx-auto mb-4`}
+            style={{
+              boxShadow: config.iconShadow
+            }}
+          >
+            {config.icon}
           </div>
+          
+          <h3 className={`text-xl font-bold ${config.titleColor} mb-2`}>
+            {title || getDefaultTitle()}
+          </h3>
+          <p className={`${config.messageColor} px-6 leading-relaxed`}>
+            {message}
+          </p>
+        </div>
 
-          {/* Action Button */}
-          <div className="px-6 pb-8">
-            <button
-              onClick={handleClose}
-              className={`w-full px-6 py-3 ${config.buttonGradient} text-white font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 transform hover:-translate-y-0.5`}
-              style={{
-                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.05)',
-                textShadow: '0 1px 1px rgba(0, 0, 0, 0.2)'
-              }}
-            >
-              Förstått
-            </button>
-            
-            <p className="text-xs text-gray-500 text-center mt-3">
-              Detta stängs automatiskt om {Math.ceil(duration / 1000)} sekunder
-            </p>
-          </div>
+        {/* Action Button */}
+        <div className="px-6 pb-8">
+          <button
+            onClick={handleClose}
+            className={`w-full px-6 py-3 ${config.buttonGradient} text-white font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 transform hover:-translate-y-0.5`}
+            style={{
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.05)',
+              textShadow: '0 1px 1px rgba(0, 0, 0, 0.2)'
+            }}
+          >
+            Förstått
+          </button>
+          
+          <p className="text-xs text-gray-500 text-center mt-3">
+            Detta stängs automatiskt om {Math.ceil(duration / 1000)} sekunder
+          </p>
         </div>
       </div>
-    </>
+    </div>
   );
 };
 

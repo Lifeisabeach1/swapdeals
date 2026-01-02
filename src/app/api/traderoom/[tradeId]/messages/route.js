@@ -1,44 +1,47 @@
-// src/app/api/trades/[tradeId]/messages/route.js
+// app/api/traderoom/[tradeId]/messages/route.js
 import { NextResponse } from 'next/server';
-import { knex } from '@/lib/db/index.js';
-import jwt from 'jsonwebtoken';
+import { createClient } from '@supabase/supabase-js';
+import { headers } from 'next/headers'; // ← LÄGG TILL
+import { verifyToken } from '@/lib/auth/jwt';
 import { v4 as uuidv4 } from 'uuid';
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+// GET - Fetch messages
 export async function GET(request, { params }) {
   try {
-    const { tradeId } = await params; // Add await here
+    const { tradeId } = await params;
     
-    // Get auth token
-    const authHeader = request.headers.get('authorization');
+    // ← FIX: Verify auth med headers()
+    const headersList = await headers();
+    const authHeader = headersList.get('authorization');
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ 
         success: false, 
-        message: 'Authorization token required' 
+        message: 'Authorization required' 
       }, { status: 401 });
     }
 
     const token = authHeader.substring(7);
+    const decoded = verifyToken(token);
 
-    // Verify token and get user
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (tokenError) {
-      console.error('Token verification failed:', tokenError);
+    if (!decoded) {
       return NextResponse.json({ 
         success: false, 
         message: 'Invalid or expired token' 
       }, { status: 401 });
     }
 
-    const userId = decoded.id;
-
-    // First, verify that the user is part of this trade
-    const trade = await knex('trades')
-      .select('buyer_id', 'seller_id')
-      .where('id', tradeId)
-      .first();
+    // Verify user is part of trade
+    const { data: trade } = await supabase
+      .from('trades')
+      .select('buyer_id, seller_id')
+      .eq('id', tradeId)
+      .single();
 
     if (!trade) {
       return NextResponse.json({ 
@@ -47,139 +50,117 @@ export async function GET(request, { params }) {
       }, { status: 404 });
     }
 
-    // Verify that the authenticated user is either the buyer or seller
-    if (userId !== trade.buyer_id && userId !== trade.seller_id) {
+    if (decoded.id !== trade.buyer_id && decoded.id !== trade.seller_id) {
       return NextResponse.json({
         success: false,
-        message: 'You are not authorized to view messages for this trade'
+        message: 'Access denied'
       }, { status: 403 });
     }
 
-    // Query messages for this trade using NEW SCHEMA
-    const messages = await knex('trade_messages')
-      .select([
-        'trade_messages.id',
-        'trade_messages.message_uuid',
-        'trade_messages.trade_id',
-        'trade_messages.sender_id',
-        'trade_messages.content',        // Changed from 'message'
-        'trade_messages.type',           // Changed from 'message_type'
-        'trade_messages.status',
-        'trade_messages.attachments',
-        'trade_messages.metadata',
-        'trade_messages.sent_at',
-        'trade_messages.delivered_at',
-        'trade_messages.read_at',
-        'trade_messages.reply_to_id',
-        'trade_messages.is_pinned',
-        'trade_messages.is_important',
-        'trade_messages.is_system_message',
-        'trade_messages.system_event_type',
-        'trade_messages.is_edited',
-        'trade_messages.created_at',
-        'trade_messages.updated_at',
-        'users.username',
-        'users.first_name',
-        'users.last_name',
-        'users.avatar_url'
-      ])
-      .leftJoin('users', 'trade_messages.sender_id', 'users.id')
-      .where('trade_messages.trade_id', tradeId)
-      .where('trade_messages.is_deleted', false)  // Only get non-deleted messages
-      .orderBy('trade_messages.created_at', 'asc');
+    // Get messages
+    const { data: messages, error } = await supabase
+      .from('trade_messages')
+      .select('*, users:sender_id (username, first_name, last_name, avatar_url)')
+      .eq('trade_id', tradeId)
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      // Fallback: fetch separately
+      const { data: messagesOnly } = await supabase
+        .from('trade_messages')
+        .select('*')
+        .eq('trade_id', tradeId)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: true });
+
+      const senderIds = [...new Set(messagesOnly?.map(m => m.sender_id) || [])];
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, username, first_name, last_name, avatar_url')
+        .in('id', senderIds);
+
+      const userMap = {};
+      users?.forEach(u => { userMap[u.id] = u; });
+
+      const formatted = (messagesOnly || []).map(m => ({
+        ...m,
+        sender: {
+          username: userMap[m.sender_id]?.username,
+          first_name: userMap[m.sender_id]?.first_name,
+          last_name: userMap[m.sender_id]?.last_name,
+          name: `${userMap[m.sender_id]?.first_name || ''} ${userMap[m.sender_id]?.last_name || ''}`.trim() || userMap[m.sender_id]?.username,
+          avatar_url: userMap[m.sender_id]?.avatar_url
+        }
+      }));
+
+      return NextResponse.json({ success: true, data: formatted });
+    }
 
     // Format messages
-    const formattedMessages = messages.map(message => ({
-      id: message.id,
-      message_uuid: message.message_uuid,
-      trade_id: message.trade_id,
-      sender_id: message.sender_id,
-      content: message.content,           // Using new column name
-      type: message.type,                 // Using new column name
-      status: message.status,
-      attachments: message.attachments,
-      metadata: message.metadata,
-      sent_at: message.sent_at,
-      delivered_at: message.delivered_at,
-      read_at: message.read_at,
-      reply_to_id: message.reply_to_id,
-      is_pinned: message.is_pinned,
-      is_important: message.is_important,
-      is_system_message: message.is_system_message,
-      system_event_type: message.system_event_type,
-      is_edited: message.is_edited,
-      created_at: message.created_at,
-      updated_at: message.updated_at,
+    const formatted = (messages || []).map(m => ({
+      ...m,
       sender: {
-        username: message.username,
-        first_name: message.first_name,
-        last_name: message.last_name,
-        name: `${message.first_name || ''} ${message.last_name || ''}`.trim() || message.username,
-        avatar_url: message.avatar_url
+        username: m.users?.username,
+        first_name: m.users?.first_name,
+        last_name: m.users?.last_name,
+        name: `${m.users?.first_name || ''} ${m.users?.last_name || ''}`.trim() || m.users?.username,
+        avatar_url: m.users?.avatar_url
       }
     }));
 
-    return NextResponse.json({
-      success: true,
-      data: formattedMessages
-    });
+    return NextResponse.json({ success: true, data: formatted });
 
   } catch (error) {
-    console.error('Error fetching trade messages:', error);
+    console.error('Error fetching messages:', error);
     return NextResponse.json({
       success: false,
-      message: 'Failed to fetch messages',
-      error: error.message
+      message: 'Failed to fetch messages'
     }, { status: 500 });
   }
 }
 
+// POST - Send message
 export async function POST(request, { params }) {
   try {
-    const { tradeId } = await params; // Add await here
+    const { tradeId } = await params;
+    const body = await request.json();
+    const { message, message_type = 'text', attachments, metadata } = body;
     
-    // Get auth token
-    const authHeader = request.headers.get('authorization');
+    // ← FIX: Verify auth med headers()
+    const headersList = await headers();
+    const authHeader = headersList.get('authorization');
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ 
         success: false, 
-        message: 'Authorization token required' 
+        message: 'Authorization required' 
       }, { status: 401 });
     }
 
     const token = authHeader.substring(7);
+    const decoded = verifyToken(token);
 
-    // Verify token and get user
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (tokenError) {
-      console.error('Token verification failed:', tokenError);
+    if (!decoded) {
       return NextResponse.json({ 
         success: false, 
         message: 'Invalid or expired token' 
       }, { status: 401 });
     }
 
-    const userId = decoded.id;
-
-    // Get request body
-    const body = await request.json();
-    const { message, message_type = 'text', attachments, metadata } = body;
-
-    if (!message || message.trim() === '') {
+    if (!message?.trim()) {
       return NextResponse.json({
         success: false,
-        message: 'Message content is required'
+        message: 'Message content required'
       }, { status: 400 });
     }
 
-    // First, verify that the user is part of this trade
-    const trade = await knex('trades')
-      .select('buyer_id', 'seller_id')
-      .where('id', tradeId)
-      .first();
+    // Verify user is part of trade
+    const { data: trade } = await supabase
+      .from('trades')
+      .select('buyer_id, seller_id')
+      .eq('id', tradeId)
+      .single();
 
     if (!trade) {
       return NextResponse.json({ 
@@ -188,103 +169,67 @@ export async function POST(request, { params }) {
       }, { status: 404 });
     }
 
-    // Verify that the authenticated user is either the buyer or seller
-    if (userId !== trade.buyer_id && userId !== trade.seller_id) {
+    if (decoded.id !== trade.buyer_id && decoded.id !== trade.seller_id) {
       return NextResponse.json({
         success: false,
-        message: 'You are not authorized to send messages for this trade'
+        message: 'Access denied'
       }, { status: 403 });
     }
 
-    // Insert the new message using NEW SCHEMA
-    const messageData = {
-      message_uuid: uuidv4(),
-      trade_id: tradeId,
-      sender_id: userId,
-      content: message.trim(),
-      type: message_type,
-      status: 'sent',
-      attachments: attachments || null,
-      metadata: metadata || null
-    };
+    // Insert message
+    const { data: insertedMessage, error: insertError } = await supabase
+      .from('trade_messages')
+      .insert({
+        message_uuid: uuidv4(),
+        trade_id: tradeId,
+        sender_id: decoded.id,
+        content: message.trim(),
+        type: message_type,
+        status: 'sent',
+        attachments: attachments || null,
+        metadata: metadata || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single();
 
-    // FIX: Handle the returned ID correctly
-    const insertResult = await knex('trade_messages')
-      .insert(messageData)
-      .returning('id');
-
-    // Extract the actual ID value - this was the bug!
-    let messageId;
-    if (Array.isArray(insertResult)) {
-      // PostgreSQL returns an array
-      messageId = insertResult[0].id || insertResult[0];
-    } else {
-      // Some databases might return the ID directly
-      messageId = insertResult.id || insertResult;
-    }
-
-    // Make sure we have a valid integer ID
-    if (typeof messageId === 'object') {
-      messageId = messageId.id;
-    }
-
-    console.log('Message ID extracted:', messageId, typeof messageId);
-
-    // Fetch the created message with sender info
-    const createdMessage = await knex('trade_messages')
-      .select([
-        'trade_messages.*',
-        'users.username',
-        'users.first_name',
-        'users.last_name',
-        'users.avatar_url'
-      ])
-      .leftJoin('users', 'trade_messages.sender_id', 'users.id')
-      .where('trade_messages.id', messageId)  // Now passing the correct integer ID
-      .first();
-
-    if (!createdMessage) {
-      console.error('Could not find created message with ID:', messageId);
+    if (insertError) {
+      console.error('Insert error:', insertError);
       return NextResponse.json({
         success: false,
-        message: 'Message created but could not retrieve it'
+        message: 'Failed to send message'
       }, { status: 500 });
     }
 
-    // Format the response to match what your frontend expects
-    const formattedMessage = {
-      id: createdMessage.id,
-      message_uuid: createdMessage.message_uuid,
-      trade_id: createdMessage.trade_id,
-      sender_id: createdMessage.sender_id,
-      content: createdMessage.content,
-      type: createdMessage.type,
-      status: createdMessage.status,
-      attachments: createdMessage.attachments,
-      metadata: createdMessage.metadata,
-      sent_at: createdMessage.sent_at,
-      created_at: createdMessage.created_at,
-      updated_at: createdMessage.updated_at,
+    // Get user info
+    const { data: userData } = await supabase
+      .from('users')
+      .select('username, first_name, last_name, avatar_url')
+      .eq('id', decoded.id)
+      .single();
+
+    const formatted = {
+      ...insertedMessage,
       sender: {
-        username: createdMessage.username,
-        first_name: createdMessage.first_name,
-        last_name: createdMessage.last_name,
-        name: `${createdMessage.first_name || ''} ${createdMessage.last_name || ''}`.trim() || createdMessage.username,
-        avatar_url: createdMessage.avatar_url
+        username: userData?.username,
+        first_name: userData?.first_name,
+        last_name: userData?.last_name,
+        name: `${userData?.first_name || ''} ${userData?.last_name || ''}`.trim() || userData?.username,
+        avatar_url: userData?.avatar_url
       }
     };
 
     return NextResponse.json({
       success: true,
-      data: formattedMessage
+      data: formatted
     }, { status: 201 });
 
   } catch (error) {
-    console.error('Error creating trade message:', error);
+    console.error('Error sending message:', error);
     return NextResponse.json({
       success: false,
-      message: 'Failed to send message',
-      error: error.message
+      message: 'Failed to send message'
     }, { status: 500 });
   }
 }

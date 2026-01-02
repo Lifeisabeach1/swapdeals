@@ -1,7 +1,13 @@
 // src/app/api/admin/testimonials/route.js
-import { knex } from '@/lib/db/index.js';
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 // Helper function to verify admin authentication
 function verifyAdminAuth(request) {
@@ -39,34 +45,68 @@ export async function GET(request) {
     const limit = parseInt(searchParams.get('limit')) || 50;
     const offset = parseInt(searchParams.get('offset')) || 0;
 
-    const testimonials = await knex('testimonials')
-      .select([
-        'id',
-        'name',
-        'location',
-        'text',
-        'avatar',
-        'rating',
-        'bg_color as bgColor',
-        'is_verified as isVerified',
-        'is_active as isActive',
-        'created_at as createdAt',
-        'updated_at as updatedAt'
-      ])
-      .orderBy('created_at', 'desc')
-      .limit(limit)
-      .offset(offset);
+    // Get testimonials with pagination
+    const { data: testimonials, error: testimonialsError } = await supabase
+      .from('testimonials')
+      .select(`
+        id,
+        name,
+        location,
+        text,
+        avatar,
+        rating,
+        bg_color,
+        is_verified,
+        is_active,
+        created_at,
+        updated_at
+      `)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (testimonialsError) {
+      console.error('Error fetching testimonials:', testimonialsError);
+      return NextResponse.json(
+        { error: 'Failed to fetch testimonials' },
+        { status: 500 }
+      );
+    }
 
     // Get total count
-    const [{ count }] = await knex('testimonials').count('* as count');
+    const { count: total, error: countError } = await supabase
+      .from('testimonials')
+      .select('*', { count: 'exact', head: true });
+
+    if (countError) {
+      console.error('Error getting testimonials count:', countError);
+      return NextResponse.json(
+        { error: 'Failed to get testimonials count' },
+        { status: 500 }
+      );
+    }
+
+    // Transform data to match expected format (camelCase)
+    const transformedTestimonials = testimonials.map(testimonial => ({
+      id: testimonial.id,
+      name: testimonial.name,
+      location: testimonial.location,
+      text: testimonial.text,
+      avatar: testimonial.avatar,
+      rating: testimonial.rating,
+      bgColor: testimonial.bg_color,
+      isVerified: testimonial.is_verified,
+      isActive: testimonial.is_active,
+      createdAt: testimonial.created_at,
+      updatedAt: testimonial.updated_at
+    }));
 
     return NextResponse.json({
-      testimonials,
+      testimonials: transformedTestimonials,
       pagination: {
-        total: parseInt(count),
+        total: total || 0,
         limit,
         offset,
-        hasMore: offset + limit < parseInt(count)
+        hasMore: offset + limit < (total || 0)
       }
     });
 
@@ -101,9 +141,19 @@ export async function DELETE(request) {
     }
 
     // Check if testimonial exists
-    const existingTestimonial = await knex('testimonials')
-      .where('id', testimonialId)
-      .first();
+    const { data: existingTestimonial, error: fetchError } = await supabase
+      .from('testimonials')
+      .select('id')
+      .eq('id', testimonialId)
+      .single();
+
+    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is "not found"
+      console.error('Error checking testimonial existence:', fetchError);
+      return NextResponse.json(
+        { error: 'Failed to check testimonial' },
+        { status: 500 }
+      );
+    }
 
     if (!existingTestimonial) {
       return NextResponse.json(
@@ -113,11 +163,13 @@ export async function DELETE(request) {
     }
 
     // Delete the testimonial
-    const deleted = await knex('testimonials')
-      .where('id', testimonialId)
-      .del();
+    const { error: deleteError } = await supabase
+      .from('testimonials')
+      .delete()
+      .eq('id', testimonialId);
 
-    if (!deleted) {
+    if (deleteError) {
+      console.error('Error deleting testimonial:', deleteError);
       return NextResponse.json(
         { error: 'Failed to delete testimonial' },
         { status: 500 }
@@ -166,34 +218,57 @@ export async function PATCH(request) {
     if (typeof isActive !== 'undefined') {
       updateData.is_active = isActive;
     }
-    updateData.updated_at = new Date();
+    updateData.updated_at = new Date().toISOString();
 
-    const [updatedTestimonial] = await knex('testimonials')
-      .where('id', testimonialId)
+    const { data: updatedTestimonial, error: updateError } = await supabase
+      .from('testimonials')
       .update(updateData)
-      .returning([
-        'id',
-        'name',
-        'location',
-        'text',
-        'avatar',
-        'rating',
-        'bg_color as bgColor',
-        'is_verified as isVerified',
-        'is_active as isActive',
-        'updated_at as updatedAt'
-      ]);
+      .eq('id', testimonialId)
+      .select(`
+        id,
+        name,
+        location,
+        text,
+        avatar,
+        rating,
+        bg_color,
+        is_verified,
+        is_active,
+        updated_at
+      `)
+      .single();
 
-    if (!updatedTestimonial) {
+    if (updateError) {
+      console.error('Error updating testimonial:', updateError);
+      if (updateError.code === 'PGRST116') {
+        return NextResponse.json(
+          { error: 'Testimonial not found' },
+          { status: 404 }
+        );
+      }
       return NextResponse.json(
-        { error: 'Testimonial not found' },
-        { status: 404 }
+        { error: 'Failed to update testimonial' },
+        { status: 500 }
       );
     }
 
+    // Transform data to match expected format (camelCase)
+    const transformedTestimonial = {
+      id: updatedTestimonial.id,
+      name: updatedTestimonial.name,
+      location: updatedTestimonial.location,
+      text: updatedTestimonial.text,
+      avatar: updatedTestimonial.avatar,
+      rating: updatedTestimonial.rating,
+      bgColor: updatedTestimonial.bg_color,
+      isVerified: updatedTestimonial.is_verified,
+      isActive: updatedTestimonial.is_active,
+      updatedAt: updatedTestimonial.updated_at
+    };
+
     return NextResponse.json({
       message: 'Testimonial updated successfully',
-      testimonial: updatedTestimonial
+      testimonial: transformedTestimonial
     });
 
   } catch (error) {

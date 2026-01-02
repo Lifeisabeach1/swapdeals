@@ -1,155 +1,106 @@
-// /src/app/api/user/conversations/route.js
+// app/api/user/conversations/route.js
 import { NextResponse } from 'next/server';
-import { knex } from '@/lib/db/index.js';
-import jwt from 'jsonwebtoken';
+import { verifyToken } from '@/lib/auth/jwt';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(request) {
   try {
-    // Get auth token
+    // Get authorization header directly from request
     const authHeader = request.headers.get('authorization');
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ 
         success: false, 
-        message: 'Authorization token required' 
+        message: 'Authorization required' 
       }, { status: 401 });
     }
 
     const token = authHeader.substring(7);
+    const decoded = verifyToken(token);
 
-    // Verify token and get user
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (tokenError) {
-      console.error('Token verification failed:', tokenError);
+    if (!decoded) {
       return NextResponse.json({ 
         success: false, 
         message: 'Invalid or expired token' 
       }, { status: 401 });
     }
 
-    const userId = decoded.id;
+    // Get trades where user is buyer or seller
+    const { data: conversations, error: tradesError } = await supabase
+      .from('trades')
+      .select(`
+        id,
+        status,
+        buyer_id,
+        seller_id,
+        created_at,
+        updated_at,
+        listings:listing_id (title, location, images),
+        buyer_user:users!buyer_id (id, username, first_name, last_name, email, phone, avatar_url),
+        seller_user:users!seller_id (id, username, first_name, last_name, email, phone, avatar_url)
+      `)
+      .or(`buyer_id.eq.${decoded.id},seller_id.eq.${decoded.id}`)
+      .order('updated_at', { ascending: false });
 
-    // Get all trades where user is buyer or seller, with last message info
-    const conversations = await knex('trades')
-      .select([
-        'trades.id as trade_id',
-        'trades.status as trade_status',
-        'trades.buyer_id',
-        'trades.seller_id',
-        'trades.created_at as trade_created_at',
-        'trades.updated_at as trade_updated_at',
-        
-        // Listing info
-        'listings.title as listing_title',
-        'listings.location',
-        'listings.images',
-        
-        // Other user info (buyer or seller, whoever is NOT the current user)
-        knex.raw(`
-          CASE 
-            WHEN trades.buyer_id = ? THEN seller_user.id
-            ELSE buyer_user.id
-          END as other_user_id
-        `, [userId]),
-        knex.raw(`
-          CASE 
-            WHEN trades.buyer_id = ? THEN seller_user.username
-            ELSE buyer_user.username
-          END as other_user_username
-        `, [userId]),
-        knex.raw(`
-          CASE 
-            WHEN trades.buyer_id = ? THEN seller_user.first_name
-            ELSE buyer_user.first_name
-          END as other_user_first_name
-        `, [userId]),
-        knex.raw(`
-          CASE 
-            WHEN trades.buyer_id = ? THEN seller_user.last_name
-            ELSE buyer_user.last_name
-          END as other_user_last_name
-        `, [userId]),
-        knex.raw(`
-          CASE 
-            WHEN trades.buyer_id = ? THEN seller_user.email
-            ELSE buyer_user.email
-          END as other_user_email
-        `, [userId]),
-        knex.raw(`
-          CASE 
-            WHEN trades.buyer_id = ? THEN seller_user.phone
-            ELSE buyer_user.phone
-          END as other_user_phone
-        `, [userId]),
-        knex.raw(`
-          CASE 
-            WHEN trades.buyer_id = ? THEN seller_user.avatar_url
-            ELSE buyer_user.avatar_url
-          END as other_user_avatar_url
-        `, [userId]),
-      ])
-      .leftJoin('listings', 'trades.listing_id', 'listings.id')
-      .leftJoin('users as buyer_user', 'trades.buyer_id', 'buyer_user.id')
-      .leftJoin('users as seller_user', 'trades.seller_id', 'seller_user.id')
-      .where(function() {
-        this.where('trades.buyer_id', userId)
-            .orWhere('trades.seller_id', userId);
-      })
-      .orderBy('trades.updated_at', 'desc');
+    if (tradesError) {
+      console.error('Error fetching conversations:', tradesError);
+      return NextResponse.json({
+        success: false,
+        message: 'Failed to fetch conversations'
+      }, { status: 500 });
+    }
 
-    // For each conversation, get the last message and unread count
+    // Get messages and unread counts for each conversation
     const conversationsWithMessages = await Promise.all(
-      conversations.map(async (conversation) => {
+      (conversations || []).map(async (conversation) => {
         // Get last message
-        const lastMessage = await knex('trade_messages')
-          .select([
-            'id',
-            'content',
-            'sender_id',
-            'created_at',
-            'status'
-          ])
-          .where('trade_id', conversation.trade_id)
-          .where('is_deleted', false)
-          .orderBy('created_at', 'desc')
-          .first();
+        const { data: lastMessage } = await supabase
+          .from('trade_messages')
+          .select('id, content, sender_id, created_at, status')
+          .eq('trade_id', conversation.id)
+          .eq('is_deleted', false)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
 
-        // Get unread count (messages sent by the other user that haven't been read)
-        const unreadCount = await knex('trade_messages')
-          .count('* as count')
-          .where('trade_id', conversation.trade_id)
-          .where('sender_id', '!=', userId)
-          .where('is_deleted', false)
-          .whereNull('read_at')
-          .first();
+        // Get unread count
+        const { count: unreadCount } = await supabase
+          .from('trade_messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('trade_id', conversation.id)
+          .neq('sender_id', decoded.id)
+          .eq('is_deleted', false)
+          .is('read_at', null);
+
+        // Determine other user
+        const isCurrentUserBuyer = conversation.buyer_id === decoded.id;
+        const otherUser = isCurrentUserBuyer ? conversation.seller_user : conversation.buyer_user;
 
         return {
-          trade_id: conversation.trade_id,
-          trade_status: conversation.trade_status,
-          listing_title: conversation.listing_title,
-          location: conversation.location,
-          listing_images: conversation.images,
-          trade_created_at: conversation.trade_created_at,
-          trade_updated_at: conversation.trade_updated_at,
+          trade_id: conversation.id,
+          trade_status: conversation.status,
+          listing_title: conversation.listings?.title,
+          location: conversation.listings?.location,
+          listing_images: conversation.listings?.images,
+          trade_created_at: conversation.created_at,
+          trade_updated_at: conversation.updated_at,
           other_user: {
-            id: conversation.other_user_id,
-            username: conversation.other_user_username,
-            first_name: conversation.other_user_first_name,
-            last_name: conversation.other_user_last_name,
-            name: `${conversation.other_user_first_name || ''} ${conversation.other_user_last_name || ''}`.trim() || conversation.other_user_username,
-            email: conversation.other_user_email,
-            phone: conversation.other_user_phone,
-            avatar_url: conversation.other_user_avatar_url
+            id: otherUser?.id,
+            username: otherUser?.username,
+            first_name: otherUser?.first_name,
+            last_name: otherUser?.last_name,
+            name: `${otherUser?.first_name || ''} ${otherUser?.last_name || ''}`.trim() || otherUser?.username,
+            email: otherUser?.email,
+            phone: otherUser?.phone,
+            avatar_url: otherUser?.avatar_url
           },
-          last_message: lastMessage,
-          unread_count: parseInt(unreadCount?.count || 0)
+          last_message: lastMessage || null,
+          unread_count: unreadCount || 0
         };
       })
     );
 
-    // Sort by last message time (most recent first)
+    // Sort by most recent message
     conversationsWithMessages.sort((a, b) => {
       const aTime = a.last_message?.created_at || a.trade_updated_at;
       const bTime = b.last_message?.created_at || b.trade_updated_at;
@@ -162,7 +113,7 @@ export async function GET(request) {
     });
 
   } catch (error) {
-    console.error('Error fetching user conversations:', error);
+    console.error('Error fetching conversations:', error);
     return NextResponse.json({
       success: false,
       message: 'Failed to fetch conversations',

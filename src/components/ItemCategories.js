@@ -4,68 +4,135 @@ import React, { useState, useEffect, useRef } from 'react';
 
 // Swedish categories organized with expandable main categories and subcategories
 const itemCategories = [
-  {
-    id: 'hem-tradgard',
-    label: 'Hem & Trädgård',
-    emoji: '🏠',
-    isMainCategory: true,
-    subcategories: [
-      { value: 'hem', label: 'Hem & Boende', emoji: '🏠' },
-      { value: 'mobler', label: 'Möbler', emoji: '🪑' },
-      { value: 'tradgard', label: 'Trädgård', emoji: '🌱' },
-      { value: 'verktyg', label: 'Verktyg', emoji: '🔧' },
-    ]
-  },
-  {
-    id: 'mode-skonhet',
-    label: 'Mode & Skönhet',
-    emoji: '👕',
-    isMainCategory: true,
-    subcategories: [
-      { value: 'mode', label: 'Mode & Kläder', emoji: '👕' },
-      { value: 'skonhet', label: 'Skönhet & Vård', emoji: '💄' },
-      { value: 'vintage', label: 'Vintage & Retro', emoji: '🕰️' },
-    ]
-  },
+{
+  id: 'hem-trädgård',
+  label: 'Hem & Trädgård',
+  emoji: '🏠',
+  isMainCategory: true,
+  subcategories: [
+    { value: 'möbler', label: 'Möbler & Inredning', emoji: '🪑' },
+    { value: 'kök', label: 'Kök & Vitvaror', emoji: '🍳' },
+    { value: 'badrum', label: 'Badrum & Sanitet', emoji: '🚿' },
+    { value: 'belysning', label: 'Belysning & Lampor', emoji: '💡' },
+    { value: 'textilier', label: 'Textilier & Mattor', emoji: '🛋️' },
+    { value: 'trädgård', label: 'Trädgård & Plantering', emoji: '🌱' },
+    { value: 'trädgårdsmaskiner', label: 'Trädgårdsmaskiner', emoji: '🚜' },
+    { value: 'utemiljö', label: 'Utemiljö & Terrass', emoji: '🏡' },
+    { value: 'verktyg', label: 'Verktyg & Byggmaterial', emoji: '🔨' },
+    { value: 'målning', label: 'Målning & Tapetsering', emoji: '🎨' },
+    { value: 'golv', label: 'Golv & Mattor', emoji: '🏠' },
+    { value: 'säkerhet', label: 'Säkerhet & Larm', emoji: '🔒' },
+    { value: 'uppvärmning', label: 'Uppvärmning & Ventilation', emoji: '🔥' },
+    { value: 'fönster-dörrar', label: 'Fönster & Dörrar', emoji: '🚪' },
+    { value: 'pool', label: 'Pool & Spa', emoji: '🏊' },
+    { value: 'energi', label: 'Energi & Solceller', emoji: '⚡' }
+  ]
+},
+{
+  id: 'mode-skönhet',
+  label: 'Mode & Skönhet',
+  emoji: '👕',
+  isMainCategory: true,
+  subcategories: [
+    { value: 'damkläder', label: 'Damkläder', emoji: '👗' },
+    { value: 'herrkläder', label: 'Herrkläder', emoji: '👔' },
+    { value: 'skor', label: 'Skor & Kängor', emoji: '👠' },
+    { value: 'väskor-tillbehör', label: 'Väskor & Tillbehör', emoji: '👜' },
+    { value: 'smycken', label: 'Smycken & Klockor', emoji: '💎' },
+    { value: 'vintage', label: 'Vintage & Secondhand', emoji: '👘' },
+    { value: 'makeup', label: 'Makeup & Kosmetika', emoji: '💄' },
+    { value: 'hudvård', label: 'Hudvård & Ansiktsvård', emoji: '🧴' },
+    { value: 'hårvård', label: 'Hårvård & Styling', emoji: '💇' },
+    { value: 'parfym', label: 'Parfym & Dofter', emoji: '🌸' },
+    { value: 'nagelvård', label: 'Nagelvård & Manikyr', emoji: '💅' },
+    { value: 'frisörsalong', label: 'Frisörsalonger', emoji: '✂️' },
+    { value: 'skönhetssalong', label: 'Skönhetssalonger', emoji: '💆' },
+    { value: 'spa', label: 'Spa & Wellness', emoji: '🧘' },
+    { value: 'tattoo', label: 'Tatueringar & Piercing', emoji: '🎨' },
+    { value: 'bröllop', label: 'Bröllop & Festkläder', emoji: '💒' },
+    { value: 'kostym', label: 'Kostymer & Formella kläder', emoji: '🤵' },
+    { value: 'skräddarsytt', label: 'Skräddarsytt & Alterationer', emoji: '🪡' },
+    { value: 'personlig', label: 'Personlig Shopping & Styling', emoji: '🛍️' }
+  ]
+},
   {
     id: 'teknik-elektronik',
     label: 'Teknik & Elektronik',
     emoji: '📱',
     isMainCategory: true,
     subcategories: [
-      { value: 'teknik', label: 'Teknik & Elektronik', emoji: '📱' },
-      { value: 'fotografering', label: 'Fotografering', emoji: '📷' },
-      { value: 'elektronik', label: 'Elektronik', emoji: '🔌' },
+       { value: 'mobiler', label: 'Mobiltelefoner & Surfplattor', emoji: '📱' },
+    { value: 'datorer', label: 'Datorer & Laptops', emoji: '💻' },
+    { value: 'gaming', label: 'Gaming & Spelkonsoler', emoji: '🎮' },
+    { value: 'fotografering', label: 'Fotografering & Kameror', emoji: '📷' },
+    { value: 'ljud-bild', label: 'Ljud & Bild', emoji: '🎵' },
+    { value: 'tv', label: 'TV & Hemmabioanläggningar', emoji: '📺' },
+    { value: 'smarthome', label: 'Smart Home & IoT', emoji: '🏠' },
+    { value: 'nätverk', label: 'Nätverk & Bredband', emoji: '📶' },
+    { value: 'tillbehör', label: 'Tillbehör & Kablar', emoji: '🔌' },
+    { value: 'verktyg', label: 'Elektronikverktyg', emoji: '🔧' },
+    { value: 'komponenter', label: 'Elektronikkomponenter', emoji: '⚡' },
+    { value: 'drönare', label: 'Drönare & RC', emoji: '🚁' },
+    { value: 'wearables', label: 'Smartklockor', emoji: '⌚' },
+    { value: 'reparation', label: 'Reparationstjänster', emoji: '🛠️' },
     ]
   },
   {
-    id: 'hobby-underhallning',
-    label: 'Hobby & Underhållning',
-    emoji: '🎮',
-    isMainCategory: true,
-    subcategories: [
-      { value: 'spel', label: 'Spel & Gaming', emoji: '🎮' },
-      { value: 'musik', label: 'Musik & Instrument', emoji: '🎵' },
-      { value: 'bocker', label: 'Böcker', emoji: '📚' },
-      { value: 'konst', label: 'Konst & Hantverk', emoji: '🎨' },
-      { value: 'hantverk', label: 'Hantverk & Stickning', emoji: '✂️' },
-      { value: 'pussel', label: 'Pussel & Brädspel', emoji: '🧩' },
-      { value: 'filmer', label: 'Filmer & Media', emoji: '🎬' },
-    ]
-  },
+  id: 'hobby-underhållning',
+  label: 'Hobby & Underhållning',
+  emoji: '🎮',
+  isMainCategory: true,
+  subcategories: [
+    { value: 'spel', label: 'Spel & Gaming', emoji: '🎮' },
+    { value: 'brädspel', label: 'Brädspel & Pussel', emoji: '🧩' },
+    { value: 'musik', label: 'Musik & Instrument', emoji: '🎵' },
+    { value: 'dans', label: 'Dans & Rörelse', emoji: '💃' },
+    { value: 'böcker', label: 'Böcker & Tidningar', emoji: '📚' },
+    { value: 'konst', label: 'Konst & Målning', emoji: '🎨' },
+    { value: 'hantverk', label: 'Hantverk & DIY', emoji: '✂️' },
+    { value: 'stickning', label: 'Stickning & Virkning', emoji: '🧶' },
+    { value: 'fotografering', label: 'Fotografering & Foto', emoji: '📸' },
+    { value: 'filmer', label: 'Filmer & Serier', emoji: '🎬' },
+    { value: 'streaming', label: 'Streaming & Podcasts', emoji: '📺' },
+    { value: 'teater', label: 'Teater & Scenkonst', emoji: '🎭' },
+    { value: 'samlande', label: 'Samlande & Antikviteter', emoji: '🏺' },
+    { value: 'modellbygge', label: 'Modellbygge & RC', emoji: '✈️' },
+    { value: 'astronomi', label: 'Astronomi & Vetenskap', emoji: '🔭' },
+    { value: 'trädgårdsodling', label: 'Trädgårdsodling & Växter', emoji: '🌱' },
+    { value: 'matlagning', label: 'Matlagning & Bakning', emoji: '👨‍🍳' },
+    { value: 'magi', label: 'Magi & Trollkonster', emoji: '🎩' },
+    { value: 'kurser', label: 'Kurser & Workshops', emoji: '🎓' },
+    { value: 'evenemang', label: 'Evenemang & Festivaler', emoji: '🎪' },
+  ]
+},
   {
-    id: 'sport-utomhus',
-    label: 'Sport & Utomhus',
-    emoji: '🚲',
-    isMainCategory: true,
-    subcategories: [
-      { value: 'sport', label: 'Sport & Motion', emoji: '🚲' },
-      { value: 'utomhus', label: 'Utomhus & Camping', emoji: '🏕️' },
-      { value: 'cykling', label: 'Cykling', emoji: '🚴' },
-      { value: 'fiske', label: 'Fiske', emoji: '🎣' },
-      { value: 'traning', label: 'Träning & Fitness', emoji: '💪' },
-    ]
-  },
+  id: 'sport-utomhus',
+  label: 'Sport & Utomhus',
+  emoji: '🚲',
+  isMainCategory: true,
+  subcategories: [
+    { value: 'cykling', label: 'Cykling & Cyklar', emoji: '🚴' },
+    { value: 'träning', label: 'Träning & Fitness', emoji: '💪' },
+    { value: 'gym', label: 'Gym & Träningsredskap', emoji: '🏋️' },
+    { value: 'löpning', label: 'Löpning & Jogging', emoji: '🏃' },
+    { value: 'vintersport', label: 'Vintersport & Skidåkning', emoji: '⛷️' },
+    { value: 'vattensport', label: 'Vattensport & Simning', emoji: '🏊' },
+    { value: 'camping', label: 'Camping & Friluftsliv', emoji: '🏕️' },
+    { value: 'vandring', label: 'Vandring & Bergsklättring', emoji: '🥾' },
+    { value: 'jakt', label: 'Jakt & Fiske', emoji: '🎣' },
+    { value: 'bollsport', label: 'Bollsport & Lagsport', emoji: '⚽' },
+    { value: 'racketsport', label: 'Racketsport & Tennis', emoji: '🎾' },
+    { value: 'kampsport', label: 'Kampsport & Självförsvar', emoji: '🥋' },
+    { value: 'golf', label: 'Golf & Golfutrustning', emoji: '⛳' },
+    { value: 'ridning', label: 'Ridning & Hästsport', emoji: '🏇' },
+    { value: 'motorsport', label: 'Motorsport & Racing', emoji: '🏁' },
+    { value: 'extremsport', label: 'Extremsport & Äventyr', emoji: '🪂' },
+    { value: 'yoga', label: 'Yoga & Meditation', emoji: '🧘' },
+    { value: 'sportkläder', label: 'Sportkläder & Skor', emoji: '👟' },
+    { value: 'näring', label: 'Kosttillskott & Näring', emoji: '💊' },
+    { value: 'sportevenemang', label: 'Sportevenemang & Tävlingar', emoji: '🏆' }
+  ]
+},
   {
     id: 'barn-baby',
     label: 'Barn & Baby',
@@ -73,7 +140,7 @@ const itemCategories = [
     isMainCategory: true,
     subcategories: [
       { value: 'leksaker', label: 'Leksaker', emoji: '🧸' },
-      { value: 'barnklader', label: 'Barnkläder', emoji: '👕' },
+      { value: 'barnkläder', label: 'Barnkläder', emoji: '👕' },
       { value: 'barnvagnar', label: 'Barnvagnar & Utrustning', emoji: '🍼' },
     ]
   },
@@ -84,26 +151,44 @@ const itemCategories = [
     isMainCategory: true,
     subcategories: [
       { value: 'fordon', label: 'Fordon & Bilar', emoji: '🚗' },
-      { value: 'transport', label: 'Transport & Frakt', emoji: '🚚' },
+    { value: 'motorcyklar', label: 'Motorcyklar & Mopeder', emoji: '🏍️' },
+    { value: 'lastbilar', label: 'Lastbilar & Tunga Fordon', emoji: '🚛' },
+    { value: 'transport', label: 'Transport & Frakt', emoji: '🚚' },
+    { value: 'sjöfart', label: 'Sjöfart & Båtar', emoji: '🚢' },
+    { value: 'cyklar', label: 'Cyklar & Elsparkcyklar', emoji: '🚲' },
+    { value: 'reservdelar', label: 'Reservdelar & Tillbehör', emoji: '🔧' },
+    { value: 'verkstad', label: 'Verkstadstjänster', emoji: '🛠️' },
+    { value: 'taxi', label: 'Taxi & Ridesharing', emoji: '🚕' }
     ]
   },
-  {
-    id: 'halsa-valmaende',
-    label: 'Hälsa & Välmående',
-    emoji: '💊',
-    isMainCategory: true,
-    subcategories: [
-      { value: 'halsa', label: 'Hälsa & Medicin', emoji: '💊' },
-      { value: 'mat', label: 'Mat & Dryck', emoji: '🍎' },
-    ]
-  },
+ {
+  id: 'mat-drycker',
+  label: 'Mat & Drycker',
+  emoji: '🌮',
+  isMainCategory: true,
+  subcategories: [
+    { value: 'recept', label: 'Recept & Matlagning', emoji: '🍳' },
+    { value: 'drycker', label: 'Drycker & Kaffe', emoji: '☕' },
+    { value: 'bakning', label: 'Bakning & Desserter', emoji: '🧁' },
+    { value: 'vegetariskt', label: 'Vegetariskt & Veganskt', emoji: '🥕' },
+    { value: 'hälsokost', label: 'Hälsokost & Superfood', emoji: '🥗' },
+    { value: 'kosttillskott', label: 'Kosttillskott & Vitaminer', emoji: '💊' }
+
+  ]
+},
   {
     id: 'djur',
     label: 'Djur',
     emoji: '🐕',
     isMainCategory: true,
     subcategories: [
-      { value: 'husdjur', label: 'Djurtillbehör', emoji: '🐕' },
+    { value: 'hundar', label: 'Hundtillbehör', emoji: '🐕' },
+    { value: 'katter', label: 'Katttillbehör', emoji: '🐱' },
+    { value: 'smådjur', label: 'Smådjur & Gnagare', emoji: '🐹' },
+    { value: 'fåglar', label: 'Fåglar & Fågeltillbehör', emoji: '🦜' },
+    { value: 'akvarier', label: 'Akvarier & Fiskar', emoji: '🐠' },
+    { value: 'reptiler', label: 'Reptiler & Amfibier', emoji: '🦎' },
+    { value: 'djurfoder', label: 'Djurfoder & Näringsämnen', emoji: '🥘' }
     ]
   },
   {
@@ -114,6 +199,7 @@ const itemCategories = [
     subcategories: [
       { value: 'samlarobjekt', label: 'Samlarobjekt', emoji: '💎' },
       { value: 'antik', label: 'Antik & Vintage', emoji: '🏺' },
+      { value: 'vintage', label: 'Vintage & Retro', emoji: '🕰️' },
     ]
   },
   {
@@ -123,23 +209,23 @@ const itemCategories = [
     isMainCategory: true,
     subcategories: [
       { value: 'resor', label: 'Resor & Resväskor', emoji: '✈️' },
-      { value: 'kurser', label: 'Kurser & Utbildning', emoji: '🎓' },
-      { value: 'sprak', label: 'Språk & Lärande', emoji: '🗣️' },
+      { value: 'utbildning', label: 'Kurser & Utbildning', emoji: '🎓' },
+      { value: 'språk', label: 'Språk & Lärande', emoji: '🗣️' },
     ]
   },
   {
-    id: 'tjanster',
+    id: 'tjänster',
     label: 'Tjänster',
     emoji: '🤝',
     isMainCategory: true,
     subcategories: [
       { value: 'undervisning', label: 'Undervisning', emoji: '👩‍🏫' },
       { value: 'reparationer', label: 'Reparationer', emoji: '🔧' },
-      { value: 'stadning', label: 'Städning', emoji: '🧽' },
+      { value: 'städning', label: 'Städning', emoji: '🧽' },
     ]
   },
   {
-    id: 'sasong-event',
+    id: 'säsong-event',
     label: 'Säsong & Event',
     emoji: '❄️',
     isMainCategory: true,
@@ -148,7 +234,7 @@ const itemCategories = [
       { value: 'sommar', label: 'Sommar & Sol', emoji: '☀️' },
       { value: 'jul', label: 'Jul & Högtider', emoji: '🎄' },
       { value: 'fest', label: 'Fest & Party', emoji: '🎉' },
-      { value: 'brollop', label: 'Bröllop & Fest', emoji: '💒' },
+      { value: 'bröllop-fest', label: 'Bröllop & Fest', emoji: '💒' },
     ]
   },
   {
@@ -159,11 +245,11 @@ const itemCategories = [
     subcategories: [
       { value: 'handgjort', label: 'Handgjort & Lokalt', emoji: '🤲' },
       { value: 'lokalproducerat', label: 'Lokalproducerat', emoji: '🌾' },
-      { value: 'miljovanligt', label: 'Miljövänligt', emoji: '♻️' },
+      { value: 'miljövänligt', label: 'Miljövänligt', emoji: '♻️' },
     ]
   },
   {
-    id: 'ovrigt',
+    id: 'övrigt',
     label: 'Övrigt',
     emoji: '📦',
     isMainCategory: true,

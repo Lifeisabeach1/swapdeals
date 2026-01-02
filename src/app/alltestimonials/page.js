@@ -1,7 +1,7 @@
 //component/AllTestimonial.js
 'use client';
-import React, { useState, useEffect } from 'react';
-import { MapPin, Star, ChevronLeft, ChevronRight, ArrowLeft, Calendar, User, Award, TrendingUp, Users, Trophy, Heart } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { MapPin, Star, ChevronLeft, ChevronRight, ArrowLeft, Calendar, User, Award, TrendingUp, Users, Trophy } from 'lucide-react';
 
 // Individual Testimonial Card Component (Enhanced)
 const TestimonialCard = ({ testimonial, isExpanded = false }) => {
@@ -275,7 +275,7 @@ export default function AllTestimonials() {
   const itemsPerPage = 9;
 
   // Fetch testimonials from API
-  const fetchTestimonials = async (page = 1, sort = 'newest', rating = 'all') => {
+  const fetchTestimonials = useCallback(async (page, sort, rating) => {
     setLoading(true);
     try {
       const offset = (page - 1) * itemsPerPage;
@@ -315,6 +315,7 @@ export default function AllTestimonials() {
       setTestimonials(fetchedTestimonials);
       setTotalCount(data.pagination.total);
       setHasMore(data.pagination.hasMore);
+      setError(null);
     } catch (err) {
       console.error('Error fetching testimonials:', err);
       setError('Misslyckades att ladda omdömen');
@@ -322,17 +323,16 @@ export default function AllTestimonials() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
+  // Fetch testimonials when dependencies change
   useEffect(() => {
     fetchTestimonials(currentPage, sortBy, filterRating);
-  }, [currentPage, sortBy, filterRating]);
+  }, [currentPage, sortBy, filterRating, fetchTestimonials]);
 
   // Reset to first page when filters change
   useEffect(() => {
-    if (currentPage !== 1) {
-      setCurrentPage(1);
-    }
+    setCurrentPage(1);
   }, [sortBy, filterRating]);
 
   const totalPages = Math.ceil(totalCount / itemsPerPage);

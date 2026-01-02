@@ -1,172 +1,138 @@
-// app/api/auth/register/route.js (App Router)
+// app/api/auth/register/route.js
+import { NextResponse } from 'next/server';
+import { hash } from 'bcrypt';
+import { supabase } from '@/lib/supabase'; // ← Use centralized client
+import { generateToken } from '@/lib/auth/jwt';
 
-import { createClient } from '@supabase/supabase-js'
-import bcrypt from 'bcryptjs'
-
-// Initialize Supabase with service role key for server-side operations
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
-
-// For App Router (app/api/auth/register/route.js)
 export async function POST(request) {
   try {
-    const { email, password, username } = await request.json()
+    const { username, email, password } = await request.json();
 
-    // Validate input
-    if (!email || !password || !username) {
-      return Response.json(
-        { error: 'Email, password, and username are required' },
+    // Validation
+    if (!username || !email || !password) {
+      return NextResponse.json(
+        { error: 'Alla fält krävs' },
         { status: 400 }
-      )
+      );
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email)) {
-      return Response.json(
-        { error: 'Invalid email format' },
+    if (username.length < 3) {
+      return NextResponse.json(
+        { error: 'Användarnamn måste vara minst 3 tecken' },
         { status: 400 }
-      )
+      );
     }
 
-    // Validate password strength
     if (password.length < 6) {
-      return Response.json(
-        { error: 'Password must be at least 6 characters long' },
+      return NextResponse.json(
+        { error: 'Lösenordet måste vara minst 6 tecken' },
         { status: 400 }
-      )
+      );
     }
 
-    // Check if user already exists
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('email, username')
-      .or(`email.eq.${email},username.eq.${username}`)
-      .single()
+    // Email validation
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      return NextResponse.json(
+        { error: 'Ogiltig e-postadress' },
+        { status: 400 }
+      );
+    }
 
-    if (existingUser) {
-      return Response.json(
-        { error: 'User with this email or username already exists' },
+    // Check if email exists (fixed)
+    const { data: existingEmail, error: emailCheckError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email.toLowerCase())
+      .maybeSingle(); // ← Use maybeSingle() instead of single()
+
+    if (emailCheckError) {
+      console.error('Email check error:', emailCheckError);
+      return NextResponse.json(
+        { error: 'Kunde inte kontrollera e-post' },
+        { status: 500 }
+      );
+    }
+
+    if (existingEmail) {
+      return NextResponse.json(
+        { error: 'E-postadressen är redan registrerad' },
         { status: 409 }
-      )
+      );
+    }
+
+    // Check if username exists (optional but recommended)
+    const { data: existingUsername } = await supabase
+      .from('users')
+      .select('id')
+      .eq('username', username)
+      .maybeSingle();
+
+    if (existingUsername) {
+      return NextResponse.json(
+        { error: 'Användarnamnet är redan taget' },
+        { status: 409 }
+      );
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10)
+    const hashedPassword = await hash(password, 12);
 
-    // Create user in database
-    const { data: userData, error: userError } = await supabase
+    // Create user
+    const { data: user, error: createError } = await supabase
       .from('users')
-      .insert([{
-        email: email,
-        username: username,
+      .insert({
+        username: username.trim(),
+        email: email.toLowerCase().trim(),
         password: hashedPassword,
-        created_at: new Date().toISOString()
-        // Don't include 'id' - let the database auto-generate it
-      }])
-      .select()
-      .single()
-
-    if (userError) {
-      console.error('User creation error:', userError)
-      return Response.json(
-        { error: 'Failed to create user: ' + userError.message },
-        { status: 500 }
-      )
-    }
-
-    // Update platform stats
-    try {
-      await updatePlatformStats()
-    } catch (statsError) {
-      console.error('Platform stats update failed:', statsError)
-      // Don't fail registration if stats update fails
-    }
-
-    // Return success (don't include password in response)
-    const { password: _, ...userResponse } = userData
-
-    return Response.json({
-      message: 'User registered successfully',
-      user: userResponse
-    }, { status: 201 })
-
-  } catch (error) {
-    console.error('Registration error:', error)
-    return Response.json(
-      { error: 'Internal server error: ' + error.message },
-      { status: 500 }
-    )
-  }
-}
-
-// Helper function to update platform stats
-async function updatePlatformStats() {
-  // Get current stats
-  const { data: currentStats, error: fetchError } = await supabase
-    .from('platform_stats')
-    .select('*')
-    .single()
-
-  if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = no rows returned
-    throw new Error('Failed to fetch platform stats: ' + fetchError.message)
-  }
-
-  if (currentStats) {
-    // Update existing stats
-    const { error: updateError } = await supabase
-      .from('platform_stats')
-      .update({
-        total_users: currentStats.total_users + 1,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', currentStats.id)
-
-    if (updateError) {
-      throw new Error('Failed to update platform stats: ' + updateError.message)
-    }
-  } else {
-    // Create initial stats record
-    const { error: insertError } = await supabase
-      .from('platform_stats')
-      .insert([{
-        total_users: 1,
-        total_listings: 0,
-        total_trades: 0,
+        role: 'user',
+        is_active: true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      }])
+      })
+      .select('id, username, email, role')
+      .single();
 
-    if (insertError) {
-      throw new Error('Failed to create platform stats: ' + insertError.message)
+    if (createError) {
+      console.error('Create user error:', createError);
+      
+      // Handle unique constraint violations
+      if (createError.code === '23505') {
+        return NextResponse.json(
+          { error: 'E-post eller användarnamn finns redan' },
+          { status: 409 }
+        );
+      }
+      
+      return NextResponse.json(
+        { error: 'Kunde inte skapa användare' },
+        { status: 500 }
+      );
     }
-  }
-}
 
-// Test function to verify the fix
-export async function testRegistration() {
-  const testData = {
-    email: 'test@example.com',
-    password: 'testpassword123',
-    username: 'testuser'
-  }
+    // Generate token (optional - if you want auto-login after registration)
+    const token = generateToken({
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      role: user.role,
+    });
 
-  try {
-    const response = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    return NextResponse.json({
+      success: true,
+      token, // Include token for auto-login
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
       },
-      body: JSON.stringify(testData)
-    })
+    }, { status: 201 }); // 201 Created
 
-    const result = await response.json()
-    console.log('Registration test result:', result)
-    return result
   } catch (error) {
-    console.error('Registration test failed:', error)
-    return { error: error.message }
+    console.error('Registration error:', error);
+    return NextResponse.json(
+      { error: 'Ett oväntat fel uppstod' },
+      { status: 500 }
+    );
   }
 }

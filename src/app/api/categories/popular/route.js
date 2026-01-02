@@ -1,110 +1,95 @@
-// app/api/categories/popular/route.js - Debug Version
+// app/api/categories/popular/route.js
 import { NextResponse } from 'next/server';
-import { knex } from '@/lib/db/index.js';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 export async function GET(request) {
-  console.log('=== POPULAR CATEGORIES API START ===');
-  
   try {
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '4');
     const days = parseInt(searchParams.get('days') || '30');
     
-    console.log('Request params:', { limit, days });
-    
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
-    console.log('Cutoff date:', cutoffDate);
     
-    // First, let's check if we have any listings at all
-    const totalListings = await knex('trade_listings')
-      .count('id as count')
-      .first();
-    console.log('Total listings in database:', totalListings);
+    // Get listings with active users from the last N days
+    const { data: listings, error: listingsError } = await supabase
+      .from('trade_listings')
+      .select(`
+        category,
+        views,
+        user_id,
+        users!inner (
+          id,
+          is_active
+        )
+      `)
+      .eq('status', 'active')
+      .eq('users.is_active', true)
+      .gte('created_at', cutoffDate.toISOString())
+      .not('category', 'is', null)
+      .neq('category', '');
     
-    // Check active listings
-    const activeListings = await knex('trade_listings')
-      .count('id as count')
-      .where('status', 'active')
-      .first();
-    console.log('Active listings:', activeListings);
+    if (listingsError) {
+      console.error('Error fetching listings:', listingsError);
+      throw listingsError;
+    }
     
-    // Simple query first
-    const allCategories = await knex('trade_listings')
-      .select('category')
-      .distinct()
-      .whereNotNull('category')
-      .where('category', '!=', '');
-    console.log('All categories in database:', allCategories);
+    // Process the data manually for aggregation
+    const categoryStats = {};
     
-    // Now the main query
-    const categories = await knex('trade_listings')
-      .select([
-        'trade_listings.category as name',
-        knex.raw('COALESCE(SUM(trade_listings.views), 0) as totalViews'),
-        knex.raw('COUNT(trade_listings.id) as listingCount'),
-        knex.raw('COUNT(DISTINCT trade_listings.user_id) as uniqueSellers')
-      ])
-      .innerJoin('users', 'trade_listings.user_id', 'users.id')
-      .where('trade_listings.status', 'active')
-      .where('users.is_active', true)
-      .where('trade_listings.created_at', '>=', cutoffDate)
-      .whereNotNull('trade_listings.category')
-      .where('trade_listings.category', '!=', '')
-      .groupBy('trade_listings.category')
-      .orderByRaw('COALESCE(SUM(trade_listings.views), 0) DESC, COUNT(trade_listings.id) DESC')
-      .limit(limit);
-    
-    console.log('Raw categories from query:', categories);
-    
-    // Convert numeric strings to actual numbers
-    const processedCategories = categories.map(category => {
-      const processed = {
-        name: category.name,
-        totalViews: parseInt(category.totalViews) || 0,
-        listingCount: parseInt(category.listingCount) || 0,
-        uniqueSellers: parseInt(category.uniqueSellers) || 0,
-        avgViews: parseFloat(category.avgViews) || 0
-      };
-      console.log('Processing category:', category, '→', processed);
-      return processed;
+    listings?.forEach(listing => {
+      const category = listing.category;
+      
+      if (!categoryStats[category]) {
+        categoryStats[category] = {
+          name: category,
+          totalViews: 0,
+          listingCount: 0,
+          uniqueSellers: new Set()
+        };
+      }
+      
+      categoryStats[category].totalViews += parseInt(listing.views) || 0;
+      categoryStats[category].listingCount += 1;
+      categoryStats[category].uniqueSellers.add(listing.user_id);
     });
     
-    console.log('Final processed categories:', processedCategories);
+    // Convert to array and sort
+    const categories = Object.values(categoryStats)
+      .map(category => ({
+        name: category.name,
+        totalViews: category.totalViews,
+        listingCount: category.listingCount,
+        uniqueSellers: category.uniqueSellers.size,
+        avgViews: category.listingCount > 0 ? 
+          parseFloat((category.totalViews / category.listingCount).toFixed(2)) : 0
+      }))
+      .sort((a, b) => {
+        // Sort by total views first, then by listing count
+        if (b.totalViews !== a.totalViews) {
+          return b.totalViews - a.totalViews;
+        }
+        return b.listingCount - a.listingCount;
+      })
+      .slice(0, limit);
     
-    const response = {
+    return NextResponse.json({
       success: true,
-      data: {
-        categories: processedCategories
-      },
-      debug: {
-        totalListings: totalListings.count,
-        activeListings: activeListings.count,
-        allCategories: allCategories.length,
-        foundCategories: categories.length
-      }
-    };
-    
-    console.log('=== SENDING RESPONSE ===');
-    console.log(JSON.stringify(response, null, 2));
-    
-    return NextResponse.json(response);
+      categories
+    });
     
   } catch (error) {
-    console.error('=== ERROR IN POPULAR CATEGORIES API ===');
-    console.error('Error details:', error);
-    console.error('Stack trace:', error.stack);
+    console.error('Error in popular categories API:', error);
     
-    const errorResponse = {
+    return NextResponse.json({
       success: false,
-      message: 'Failed to fetch popular categories',
-      error: error.message,
-      stack: error.stack
-    };
-    
-    console.log('=== SENDING ERROR RESPONSE ===');
-    console.log(JSON.stringify(errorResponse, null, 2));
-    
-    return NextResponse.json(errorResponse, { status: 500 });
+      message: 'Failed to fetch popular categories'
+    }, { status: 500 });
   }
 }

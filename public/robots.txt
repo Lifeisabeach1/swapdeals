@@ -1,0 +1,9 @@
+# *
+User-agent: *
+Allow: /
+
+# Host
+Host: https://swapdeals.se
+
+# Sitemaps
+Sitemap: https://swapdeals.se/sitemap.xml

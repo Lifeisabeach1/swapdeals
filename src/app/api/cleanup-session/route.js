@@ -1,158 +1,185 @@
 // src/app/api/cleanup-sessions/route.js
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+// Helper to verify cron authorization
+function verifyCronAuth(request) {
+  const authHeader = request.headers.get('authorization');
+  const cronSecret = process.env.CRON_SECRET;
+  
+  // Check if it's a Vercel cron job or has the correct secret
+  const isVercelCron = request.headers.get('user-agent')?.includes('vercel');
+  const hasValidSecret = cronSecret && authHeader === `Bearer ${cronSecret}`;
+  
+  return isVercelCron || hasValidSecret;
+}
 
 export async function GET(request) {
   try {
-    // Security: Verify the request is from Vercel Cron
-    const authHeader = request.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET;
-    
-    // Check if it's a Vercel cron job or has the correct secret
-    const isVercelCron = request.headers.get('user-agent')?.includes('vercel');
-    const hasValidSecret = cronSecret && authHeader === `Bearer ${cronSecret}`;
-    
-    if (!isVercelCron && !hasValidSecret) {
-      console.log('❌ Unauthorized cleanup attempt');
+    // Verify authorization
+    if (!verifyCronAuth(request)) {
       return NextResponse.json({ 
         success: false, 
-        error: 'Unauthorized' 
+        message: 'Unauthorized' 
       }, { status: 401 });
     }
 
-    console.log('🧹 Starting automated session cleanup via Vercel Cron...');
-    
     // Get current stats before cleanup
-    const totalSessionsBefore = await db('sessions').count('* as count').first();
-    const activeSessionsBefore = await db('sessions')
-      .where('is_active', true)
-      .where('expires_at', '>', new Date())
-      .count('* as count')
-      .first();
+    const { count: totalSessionsBefore } = await supabase
+      .from('sessions')
+      .select('*', { count: 'exact', head: true });
     
-    console.log(`📊 Sessions before cleanup: Total ${totalSessionsBefore.count}, Active ${activeSessionsBefore.count}`);
+    const { count: activeSessionsBefore } = await supabase
+      .from('sessions')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .gt('expires_at', new Date().toISOString());
     
     // Delete expired sessions
-    const deletedCount = await db('sessions')
-      .where('expires_at', '<', new Date())
-      .orWhere('is_active', false)
-      .del();
+    const { error: deleteError } = await supabase
+      .from('sessions')
+      .delete()
+      .or(`expires_at.lt.${new Date().toISOString()},is_active.eq.false`);
+    
+    if (deleteError) {
+      console.error('Error deleting sessions:', deleteError);
+      throw deleteError;
+    }
     
     // Get updated stats
-    const activeSessionsAfter = await db('sessions')
-      .where('is_active', true)
-      .where('expires_at', '>', new Date())
-      .count('* as count')
-      .first();
+    const { count: totalSessionsAfter } = await supabase
+      .from('sessions')
+      .select('*', { count: 'exact', head: true });
+    
+    const { count: activeSessionsAfter } = await supabase
+      .from('sessions')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .gt('expires_at', new Date().toISOString());
+    
+    const deletedCount = (totalSessionsBefore || 0) - (totalSessionsAfter || 0);
     
     // Get sessions by user for monitoring
-    const sessionsByUser = await db('sessions')
+    const { data: sessionsByUser } = await supabase
+      .from('sessions')
       .select('user_id')
-      .count('* as count')
-      .where('is_active', true)
-      .where('expires_at', '>', new Date())
-      .groupBy('user_id')
-      .limit(10); // Top 10 users with most sessions
+      .eq('is_active', true)
+      .gt('expires_at', new Date().toISOString())
+      .limit(10);
     
-    const result = {
+    // Count sessions per user
+    const userSessionCounts = {};
+    sessionsByUser?.forEach(session => {
+      userSessionCounts[session.user_id] = (userSessionCounts[session.user_id] || 0) + 1;
+    });
+    
+    const topUsersSessions = Object.entries(userSessionCounts)
+      .map(([user_id, count]) => ({ user_id, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+    
+    return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
       cleanup: {
         deletedSessions: deletedCount,
-        activeSessionsBefore: activeSessionsBefore.count,
-        activeSessionsAfter: activeSessionsAfter.count
+        activeSessionsBefore: activeSessionsBefore || 0,
+        activeSessionsAfter: activeSessionsAfter || 0
       },
       stats: {
-        topUsersSessions: sessionsByUser
+        topUsersSessions
       }
-    };
-    
-    console.log(`✅ Session cleanup completed:`, {
-      deleted: deletedCount,
-      activeBefore: activeSessionsBefore.count,
-      activeAfter: activeSessionsAfter.count
     });
     
-    return NextResponse.json(result);
-    
   } catch (error) {
-    console.error('❌ Session cleanup failed:', error);
+    console.error('Session cleanup failed:', error);
     
     return NextResponse.json({
       success: false,
-      error: error.message,
+      message: 'Session cleanup failed',
       timestamp: new Date().toISOString()
     }, { status: 500 });
   }
 }
 
-// Also allow POST for manual triggers (with proper auth)
+// Manual triggers with proper auth
 export async function POST(request) {
   try {
-    // For manual triggers, require authentication
+    // Verify authorization
     const authHeader = request.headers.get('authorization');
     const cronSecret = process.env.CRON_SECRET;
     
     if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
       return NextResponse.json({ 
         success: false, 
-        error: 'Unauthorized' 
+        message: 'Unauthorized' 
       }, { status: 401 });
     }
     
-    const { dryRun = false } = await request.json();
-    
-    console.log(`🧹 Starting manual session cleanup (dry run: ${dryRun})...`);
+    const body = await request.json();
+    const { dryRun = false } = body;
     
     // Find what would be deleted
-    const expiredSessions = await db('sessions')
-      .select(['user_id', 'expires_at', 'is_active', 'created_at'])
-      .where('expires_at', '<', new Date())
-      .orWhere('is_active', false);
+    const { data: expiredSessions } = await supabase
+      .from('sessions')
+      .select('user_id, expires_at, is_active, created_at')
+      .or(`expires_at.lt.${new Date().toISOString()},is_active.eq.false`);
     
     let deletedCount = 0;
     
     if (!dryRun) {
-      deletedCount = await db('sessions')
-        .where('expires_at', '<', new Date())
-        .orWhere('is_active', false)
-        .del();
+      const { count: beforeCount } = await supabase
+        .from('sessions')
+        .select('*', { count: 'exact', head: true });
+      
+      const { error: deleteError } = await supabase
+        .from('sessions')
+        .delete()
+        .or(`expires_at.lt.${new Date().toISOString()},is_active.eq.false`);
+      
+      if (deleteError) {
+        throw deleteError;
+      }
+      
+      const { count: afterCount } = await supabase
+        .from('sessions')
+        .select('*', { count: 'exact', head: true });
+      
+      deletedCount = (beforeCount || 0) - (afterCount || 0);
     } else {
-      deletedCount = expiredSessions.length;
+      deletedCount = expiredSessions?.length || 0;
     }
     
-    const activeCount = await db('sessions')
-      .where('is_active', true)
-      .where('expires_at', '>', new Date())
-      .count('* as count')
-      .first();
+    const { count: activeCount } = await supabase
+      .from('sessions')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .gt('expires_at', new Date().toISOString());
     
-    const result = {
+    return NextResponse.json({
       success: true,
       dryRun,
       timestamp: new Date().toISOString(),
       cleanup: {
-        foundExpired: expiredSessions.length,
+        foundExpired: expiredSessions?.length || 0,
         deletedSessions: deletedCount,
-        activeSessionsRemaining: activeCount.count
+        activeSessionsRemaining: activeCount || 0
       },
       expiredSessions: dryRun ? expiredSessions : undefined
-    };
-    
-    console.log(`✅ Manual cleanup ${dryRun ? 'preview' : 'completed'}:`, {
-      found: expiredSessions.length,
-      deleted: deletedCount,
-      active: activeCount.count
     });
     
-    return NextResponse.json(result);
-    
   } catch (error) {
-    console.error('❌ Manual session cleanup failed:', error);
+    console.error('Manual session cleanup failed:', error);
     
     return NextResponse.json({
       success: false,
-      error: error.message,
+      message: 'Manual session cleanup failed',
       timestamp: new Date().toISOString()
     }, { status: 500 });
   }

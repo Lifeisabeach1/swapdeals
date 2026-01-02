@@ -1,7 +1,13 @@
 // app/api/admin/users/route.js
 import { NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { knex } from '@/lib/db/index.js';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 async function authenticateAdmin(request) {
   console.log('=== ADMIN AUTH START ===');
@@ -25,11 +31,16 @@ async function authenticateAdmin(request) {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     console.log('Token decoded, user ID:', decoded.id);
     
-    // FIXED: Query the correct columns
-    const user = await knex('users')
-      .select('id', 'username', 'email', 'role', 'is_active')
-      .where('id', decoded.id)
-      .first();
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, username, email, role, is_active')
+      .eq('id', decoded.id)
+      .single();
+    
+    if (userError && userError.code !== 'PGRST116') {
+      console.error('Error fetching user:', userError);
+      throw new Error('Database error');
+    }
     
     if (!user) {
       throw new Error('User not found');
@@ -39,7 +50,6 @@ async function authenticateAdmin(request) {
       throw new Error('Account is not active');
     }
     
-    // FIXED: Check role correctly
     if (user.role !== 'admin') {
       throw new Error('Admin access required');
     }
@@ -53,27 +63,31 @@ async function authenticateAdmin(request) {
   }
 }
 
+// GET - Fetch all users
 export async function GET(request) {
   try {
-    // Authenticate admin
     await authenticateAdmin(request);
     
-    // FIXED: Get all user data including role information
-    const users = await knex('users')
-      .select([
-        'id',
-        'username', 
-        'email',
-        'first_name',
-        'last_name', 
-        'role',
-        'is_active',
-        'created_at',
-        'last_login_at'
-      ])
-      .orderBy('created_at', 'desc');
+    const { data: users, error: usersError } = await supabase
+      .from('users')
+      .select(`
+        id,
+        username,
+        email,
+        first_name,
+        last_name,
+        role,
+        is_active,
+        created_at,
+        last_login_at
+      `)
+      .order('created_at', { ascending: false });
     
-    // Add computed fields for frontend compatibility
+    if (usersError) {
+      console.error('Error fetching users:', usersError);
+      throw new Error('Failed to fetch users from database');
+    }
+    
     const usersWithComputedFields = users.map(user => ({
       ...user,
       name: user.first_name && user.last_name 
@@ -106,4 +120,3 @@ export async function GET(request) {
     }, { status: 500 });
   }
 }
-

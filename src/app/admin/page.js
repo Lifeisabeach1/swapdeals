@@ -1,37 +1,19 @@
+// Simple Admin Dashboard - Just Delete Users & Posts
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Users, Settings, BarChart3, FileText, Search, Shield, LogOut, Trash2, Eye, ShieldOff, Package, MessageSquare } from 'lucide-react';
-import AdminLogin from '@/components/AdminLogin';
-import { TabButton, StatCard, BanModal, ContentModal } from '@/components/AdminComponents';
-import TradeListingsAdmin from '@/components/TradeListingsAdmin';
-import TestimonialsAdmin from '@/components/TestimonialsAdmin';
-import MessagesAdmin from '@/components/MessagesAdmin';
+import { useState, useEffect } from 'react';
+import { LogOut, Trash2, RefreshCw, Users, Package, MessageSquare } from 'lucide-react';
 
 const AdminDashboard = () => {
-  // State management
   const [user, setUser] = useState(null);
-  const [activeTab, setActiveTab] = useState('overview');
-  const [data, setData] = useState({ users: [], content: [], bans: [] });
+  const [users, setUsers] = useState([]);
+  const [listings, setListings] = useState([]);
+  const [testimonials, setTestimonials] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
-  // Ban modal state
-  const [showBanModal, setShowBanModal] = useState(false);
-  const [banningUser, setBanningUser] = useState(null);
-  const [banForm, setBanForm] = useState({ reason: '', ban_type: 'manual', expires_at: '' });
-  
-  // Search and filter state
-  const [searchTerm, setSearchTerm] = useState('');
-  const [contentSearchTerm, setContentSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [contentFilter, setContentFilter] = useState('all');
-  
-  // Content modal state
-  const [selectedContent, setSelectedContent] = useState(null);
-  const [showContentModal, setShowContentModal] = useState(false);
+  const [activeTab, setActiveTab] = useState('users');
 
-  // Authentication check
+  // Login check
   useEffect(() => {
     const token = localStorage.getItem('adminToken');
     const userData = localStorage.getItem('adminUser');
@@ -41,8 +23,6 @@ const AdminDashboard = () => {
         const parsedUser = JSON.parse(userData);
         if (parsedUser.role === 'admin') {
           setUser(parsedUser);
-        } else {
-          handleLogout();
         }
       } catch {
         handleLogout();
@@ -61,593 +41,541 @@ const AdminDashboard = () => {
     'Content-Type': 'application/json'
   });
 
-  // Generic API call handler
-  const apiCall = async (url, options = {}) => {
-    const response = await fetch(url, {
-      headers: getAuthHeaders(),
-      ...options
-    });
-    
-    const data = await response.json();
-    
-    if (!response.ok) {
-      if (response.status === 401) {
-        handleLogout();
-        return null;
-      }
-      throw new Error(data.error || `Request failed (${response.status})`);
+  // Fetch data
+  useEffect(() => {
+    if (user) {
+      fetchUsers();
+      fetchListings();
+      fetchTestimonials();
     }
-    
-    return data;
-  };
+  }, [user]);
 
-  // Data fetching functions
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      setError('');
-      const result = await apiCall('/api/admin/users');
-      if (result) setData(prev => ({ ...prev, users: result.users || [] }));
+      const response = await fetch('/api/admin/users', {
+        headers: getAuthHeaders()
+      });
+      const data = await response.json();
+      if (data.users) setUsers(data.users);
     } catch (err) {
-      setError('Failed to load users: ' + err.message);
+      setError('Failed to load users');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchContent = async () => {
+  const fetchListings = async () => {
     try {
       setLoading(true);
-      setError('');
-      const result = await apiCall('/api/admin/content');
-      if (result) setData(prev => ({ ...prev, content: result.content || result.data || [] }));
+      const response = await fetch('/api/admin/content', {
+        headers: getAuthHeaders()
+      });
+      const data = await response.json();
+      if (data.content || data.data) {
+        setListings(data.content || data.data);
+      }
     } catch (err) {
-      setError('Failed to load content: ' + err.message);
+      setError('Failed to load listings');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchBans = async () => {
+  const fetchTestimonials = async () => {
     try {
-      const result = await apiCall('/api/admin/bans');
-      if (result) setData(prev => ({ ...prev, bans: result.data || [] }));
+      setLoading(true);
+      const response = await fetch('/api/admin/testimonials', {
+        headers: getAuthHeaders()
+      });
+      const data = await response.json();
+      if (data.testimonials) {
+        setTestimonials(data.testimonials);
+      }
     } catch (err) {
-      setError('Failed to load bans: ' + err.message);
+      setError('Failed to load testimonials');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const fetchAllData = () => Promise.all([fetchUsers(), fetchContent(), fetchBans()]);
-
-  useEffect(() => {
-    if (user) fetchAllData();
-  }, [user]);
-
-  // Action handlers
-  const handleBanUser = async () => {
-    if (!banForm.reason || !banningUser) {
-      setError('Please provide a reason for the ban');
-      return;
-    }
+  // Delete user
+  const handleDeleteUser = async (userId) => {
+    if (!confirm('Delete this user and all their listings?')) return;
     
     try {
       setLoading(true);
-      setError('');
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
       
-      await apiCall('/api/admin/bans', {
-        method: 'POST',
-        body: JSON.stringify({
-          user_id: banningUser.id,
-          reason: banForm.reason,
-          ban_type: banForm.ban_type,
-          expires_at: banForm.expires_at || null
+      if (response.ok) {
+        setUsers(users.filter(u => u.id !== userId));
+        alert('User deleted');
+      } else {
+        alert('Failed to delete user');
+      }
+    } catch (err) {
+      alert('Error deleting user');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Delete listing
+  const handleDeleteListing = async (listingId) => {
+    if (!confirm('Delete this listing?')) return;
+    
+    try {
+      setLoading(true);
+      const response = await fetch('/api/admin/content', {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ 
+          contentId: listingId, 
+          contentType: 'trade' 
         })
       });
-
-      setShowBanModal(false);
-      setBanningUser(null);
-      setBanForm({ reason: '', ban_type: 'manual', expires_at: '' });
       
-      await Promise.all([fetchUsers(), fetchBans()]);
-      alert('User banned successfully');
+      if (response.ok) {
+        setListings(listings.filter(l => l.id !== listingId));
+        alert('Listing deleted');
+      } else {
+        alert('Failed to delete listing');
+      }
     } catch (err) {
-      setError('Failed to ban user: ' + err.message);
+      alert('Error deleting listing');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUnbanUser = async (userId) => {
-    if (!confirm('Are you sure you want to unban this user?')) return;
+  // Delete testimonial
+  const handleDeleteTestimonial = async (testimonialId) => {
+    if (!confirm('Delete this testimonial?')) return;
     
     try {
       setLoading(true);
-      setError('');
-      
-      await apiCall(`/api/admin/bans/${userId}`, { method: 'DELETE' });
-      await Promise.all([fetchUsers(), fetchBans()]);
-      alert('User unbanned successfully');
-    } catch (err) {
-      setError('Failed to unban user: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteUser = async (userId) => {
-    if (!confirm('Are you sure you want to permanently delete this user? This action cannot be undone and will delete all their trade listings.')) return;
-    
-    try {
-      setLoading(true);
-      setError('');
-      
-      await apiCall(`/api/admin/users/${userId}`, { method: 'DELETE' });
-      await fetchAllData();
-      alert('User deleted successfully');
-    } catch (err) {
-      setError('Failed to delete user: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteContent = async (contentId, contentType = 'trade') => {
-    if (!confirm(`Are you sure you want to delete this ${contentType}? This action cannot be undone.`)) return;
-    
-    try {
-      setLoading(true);
-      setError('');
-      
-      await apiCall('/api/admin/content', {
+      const response = await fetch('/api/admin/testimonials', {
         method: 'DELETE',
-        body: JSON.stringify({ contentId, contentType })
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ testimonialId })
       });
-
-      setShowContentModal(false);
-      setSelectedContent(null);
-      await fetchContent();
-      alert('Content deleted successfully');
+      
+      if (response.ok) {
+        setTestimonials(testimonials.filter(t => t.id !== testimonialId));
+        alert('Testimonial deleted');
+      } else {
+        alert('Failed to delete testimonial');
+      }
     } catch (err) {
-      setError('Failed to delete content: ' + err.message);
+      alert('Error deleting testimonial');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleViewContent = (item) => {
-    setSelectedContent(item);
-    setShowContentModal(true);
-  };
-
-  // Helper functions
-  const isUserBanned = (user) => user.banned === true || user.status === 'banned';
-
-  const stats = {
-    totalUsers: data.users.length,
-    activeUsers: data.users.filter(u => !isUserBanned(u)).length,
-    bannedUsers: data.users.filter(u => isUserBanned(u)).length,
-    totalContent: data.content.length,
-    publishedContent: data.content.filter(c => c.status === 'published' || c.status === 'completed').length
-  };
-
-  const filteredUsers = data.users.filter(user => {
-    const matchesSearch = [user.name, user.email, user.username].some(field => 
-      field?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    const matchesStatus = filterStatus === 'all' || 
-                         (filterStatus === 'banned' && isUserBanned(user)) ||
-                         (filterStatus === 'active' && !isUserBanned(user));
-    return matchesSearch && matchesStatus;
-  });
-
-  const filteredContent = data.content.filter(item => {
-    const matchesSearch = [item.description, item.buyer_username, item.seller_username, item.id?.toString()]
-      .some(field => field?.toLowerCase().includes(contentSearchTerm.toLowerCase()));
-    const matchesFilter = contentFilter === 'all' || 
-                         (contentFilter === 'completed' && item.status === 'completed') ||
-                         (contentFilter === 'active' && (!item.status || item.status === 'active')) ||
-                         (contentFilter === 'cancelled' && item.status === 'cancelled');
-    return matchesSearch && matchesFilter;
-  });
-
-  // Render components
-  const ErrorAlert = () => error && (
-    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-      <button onClick={() => setError('')} className="float-right text-red-500 hover:text-red-700">×</button>
-      {error}
-    </div>
-  );
-
-  const LoadingSpinner = () => loading && (
-    <div className="bg-blue-50 p-4 rounded-lg text-center">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-      <p className="mt-2 text-blue-700">Loading data...</p>
-    </div>
-  );
-
-  const RefreshButton = ({ onClick, icon: Icon, text }) => (
-    <button
-      onClick={onClick}
-      disabled={loading}
-      className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
-    >
-      <Icon size={16} />
-      <span>{text}</span>
-    </button>
-  );
-
-  const SearchAndFilter = ({ searchValue, onSearchChange, searchPlaceholder, filterValue, onFilterChange, filterOptions }) => (
-    <div className="flex flex-col sm:flex-row gap-4">
-      <div className="relative flex-1">
-        <Search size={20} className="absolute left-3 top-2.5 text-gray-400" />
-        <input
-          type="text"
-          placeholder={searchPlaceholder}
-          value={searchValue}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-      <select
-        value={filterValue}
-        onChange={(e) => onFilterChange(e.target.value)}
-        className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-      >
-        {filterOptions.map(option => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
-    </div>
-  );
-
-  const EmptyState = ({ icon: Icon, title, description }) => (
-    <div className="bg-gray-50 p-8 rounded-lg text-center">
-      <Icon size={48} className="mx-auto text-gray-400 mb-4" />
-      <h3 className="text-lg font-semibold text-gray-600 mb-2">{title}</h3>
-      <p className="text-gray-500">{description}</p>
-    </div>
-  );
-
-  const renderOverview = () => (
-    <div className="space-y-6">
-      <ErrorAlert />
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        <StatCard title="Total Users" value={stats.totalUsers} icon={Users} color="#3B82F6" />
-        <StatCard title="Active Users" value={stats.activeUsers} icon={Users} color="#10B981" />
-        <StatCard title="Banned Users" value={stats.bannedUsers} icon={Shield} color="#EF4444" />
-        <StatCard title="Total Content" value={stats.totalContent} icon={FileText} color="#F59E0B" />
-        <StatCard title="Published Content" value={stats.publishedContent} icon={FileText} color="#8B5CF6" />
-      </div>
-      
-      <div className="bg-white p-6 rounded-lg shadow-md">
-        <h3 className="text-lg font-semibold mb-4">Quick Actions</h3>
-        <div className="flex flex-wrap gap-4">
-          <RefreshButton onClick={fetchUsers} icon={Users} text="Refresh Users" />
-          <RefreshButton onClick={fetchContent} icon={FileText} text="Refresh Content" />
-          <RefreshButton onClick={fetchBans} icon={Shield} text="Refresh Bans" />
-        </div>
-      </div>
-
-      <LoadingSpinner />
-    </div>
-  );
-
-  const renderUsers = () => (
-    <div className="space-y-6">
-      <ErrorAlert />
-      
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-2xl font-bold">User Management</h2>
-        <RefreshButton onClick={fetchUsers} icon={Users} text="Refresh Users" />
-      </div>
-
-      <SearchAndFilter
-        searchValue={searchTerm}
-        onSearchChange={setSearchTerm}
-        searchPlaceholder="Search users..."
-        filterValue={filterStatus}
-        onFilterChange={setFilterStatus}
-        filterOptions={[
-          { value: 'all', label: 'All Users' },
-          { value: 'active', label: 'Active' },
-          { value: 'banned', label: 'Banned' }
-        ]}
-      />
-
-      {loading ? (
-        <div className="text-center py-8">Loading users...</div>
-      ) : filteredUsers.length === 0 ? (
-        <EmptyState icon={Users} title="No Users Found" description="No users match your current filters." />
-      ) : (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Join Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredUsers.map((userItem) => (
-                  <tr key={userItem.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {userItem.name || userItem.username || 'Unknown'}
-                        </div>
-                        <div className="text-sm text-gray-500">{userItem.email}</div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        userItem.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {userItem.role || 'user'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        isUserBanned(userItem) ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-                      }`}>
-                        {isUserBanned(userItem) ? 'Banned' : 'Active'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {userItem.created_at ? new Date(userItem.created_at).toLocaleDateString() : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                        {userItem.role !== 'admin' && (
-                          <>
-                            {isUserBanned(userItem) ? (
-                              <button
-                                onClick={() => handleUnbanUser(userItem.id)}
-                                disabled={loading}
-                                className="text-green-600 hover:text-green-900 transition-colors flex items-center space-x-1 disabled:opacity-50"
-                                title="Unban User"
-                              >
-                                <ShieldOff size={16} />
-                                <span>Unban</span>
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  setBanningUser(userItem);
-                                  setShowBanModal(true);
-                                }}
-                                disabled={loading}
-                                className="text-red-600 hover:text-red-900 transition-colors flex items-center space-x-1 disabled:opacity-50"
-                                title="Ban User"
-                              >
-                                <Shield size={16} />
-                                <span>Ban</span>
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleDeleteUser(userItem.id)}
-                              className="text-red-600 hover:text-red-900 transition-colors flex items-center space-x-1"
-                              title="Delete User"
-                              disabled={loading}
-                            >
-                              <Trash2 size={16} />
-                              <span>Delete</span>
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
-  const renderContent = () => (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-2xl font-bold">Content Management</h2>
-        <RefreshButton onClick={fetchContent} icon={FileText} text="Refresh Content" />
-      </div>
-
-      <SearchAndFilter
-        searchValue={contentSearchTerm}
-        onSearchChange={setContentSearchTerm}
-        searchPlaceholder="Search content..."
-        filterValue={contentFilter}
-        onFilterChange={setContentFilter}
-        filterOptions={[
-          { value: 'all', label: 'All Content' },
-          { value: 'active', label: 'Active' },
-          { value: 'completed', label: 'Completed' },
-          { value: 'cancelled', label: 'Cancelled' }
-        ]}
-      />
-
-      {loading ? (
-        <div className="text-center py-8">Loading content...</div>
-      ) : filteredContent.length === 0 ? (
-        <EmptyState icon={FileText} title="No Content Found" description="No content matches your current filters." />
-      ) : (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Participants</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredContent.map((item) => (
-                  <tr 
-                    key={item.id} 
-                    className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => handleViewContent(item)}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm font-medium text-gray-900 capitalize">
-                        {item.type || 'trade'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900 line-clamp-2">
-                        {item.description || 'No description'}
-                      </div>
-                      {item.amount && (
-                        <div className="text-sm text-gray-500">
-                          Amount: {item.amount}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {item.buyer_username && <div>Buyer: {item.buyer_username}</div>}
-                        {item.seller_username && <div>Seller: {item.seller_username}</div>}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        item.status === 'completed' 
-                          ? 'bg-green-100 text-green-800'
-                          : item.status === 'cancelled'
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {item.status || 'active'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {item.created_at ? new Date(item.created_at).toLocaleString() : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleViewContent(item);
-                          }}
-                          className="text-blue-600 hover:text-blue-900 transition-colors flex items-center space-x-1"
-                          title="View Details"
-                        >
-                          <Eye size={16} />
-                          <span>View</span>
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteContent(item.id, item.type || 'trade');
-                          }}
-                          className="text-red-600 hover:text-red-900 transition-colors flex items-center space-x-1"
-                          title="Delete Content"
-                        >
-                          <Trash2 size={16} />
-                          <span>Delete</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
+  // Login form
   if (!user) {
     return <AdminLogin onLoginSuccess={setUser} />;
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Dashboard</h1>
-            <p className="text-gray-600">Welcome back, {user.username}!</p>
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+              <p className="text-gray-600">Welcome, {user.username || user.email}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+            >
+              <LogOut size={18} />
+              Logout
+            </button>
           </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-6 mb-6">
+          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm">Total Users</p>
+                <p className="text-3xl font-bold text-blue-600">{users.length}</p>
+              </div>
+              <Users size={32} className="text-blue-500" />
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm">Total Listings</p>
+                <p className="text-3xl font-bold text-green-600">{listings.length}</p>
+              </div>
+              <Package size={32} className="text-green-500" />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-600 text-sm">Testimonials</p>
+                <p className="text-3xl font-bold text-purple-600">{testimonials.length}</p>
+              </div>
+              <MessageSquare size={32} className="text-purple-500" />
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-4 mb-6">
           <button
-            onClick={handleLogout}
-            className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+            onClick={() => setActiveTab('users')}
+            className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium ${
+              activeTab === 'users'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-100'
+            }`}
           >
-            <LogOut size={16} />
-            <span>Logout</span>
+            <Users size={18} />
+            Users
+          </button>
+          <button
+            onClick={() => setActiveTab('listings')}
+            className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium ${
+              activeTab === 'listings'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            <Package size={18} />
+            Listings
+          </button>
+          <button
+            onClick={() => setActiveTab('testimonials')}
+            className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium ${
+              activeTab === 'testimonials'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            <MessageSquare size={18} />
+            Testimonials
           </button>
         </div>
 
-        <div className="flex flex-wrap gap-4 mb-8">
-          {[
-            { id: 'overview', label: 'Overview', icon: BarChart3 },
-            { id: 'users', label: 'Users', icon: Users },
-            { id: 'trade-listings', label: 'Trade Listings', icon: Package },
-            { id: 'messages', label: 'Messages', icon: MessageSquare },
-            { id: 'testimonials', label: 'Testimonials', icon: MessageSquare },
-            { id: 'content', label: 'Content', icon: FileText },
-            { id: 'settings', label: 'Settings', icon: Settings }
-          ].map(tab => (
-            <TabButton
-              key={tab.id}
-              id={tab.id}
-              label={tab.label}
-              icon={tab.icon}
-              isActive={activeTab === tab.id}
-              onClick={setActiveTab}
-            />
-          ))}
-        </div>
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+            {error}
+          </div>
+        )}
 
-        <div className="min-h-96">
-          {activeTab === 'overview' && renderOverview()}
-          {activeTab === 'users' && renderUsers()}
-          {activeTab === 'trade-listings' && (
-            <TradeListingsAdmin getAuthHeaders={getAuthHeaders} />
-          )}
-          {activeTab === 'messages' && (
-            <MessagesAdmin getAuthHeaders={getAuthHeaders} />
-          )}
-          {activeTab === 'testimonials' && (
-            <TestimonialsAdmin getAuthHeaders={getAuthHeaders} />
-          )}
-          {activeTab === 'content' && renderContent()}
-          {activeTab === 'settings' && (
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <h2 className="text-2xl font-bold mb-4">Settings</h2>
-              <p className="text-gray-600">Admin settings panel - customize your preferences here.</p>
+        {/* Users Tab */}
+        {activeTab === 'users' && (
+          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+            <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
+              <h2 className="text-xl font-bold">Users</h2>
+              <button
+                onClick={fetchUsers}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <RefreshCw size={16} />
+                Refresh
+              </button>
             </div>
-          )}
-        </div>
-      </div>
 
-      {showBanModal && (
-        <BanModal
-          banningUser={banningUser}
-          banForm={banForm}
-          setBanForm={setBanForm}
-          handleBanUser={handleBanUser}
-          setShowBanModal={setShowBanModal}
-        />
-      )}
-      {showContentModal && (
-        <ContentModal
-          selectedContent={selectedContent}
-          setShowContentModal={setShowContentModal}
-          handleDeleteContent={handleDeleteContent}
-        />
-      )}
+            {loading ? (
+              <div className="p-8 text-center">Loading...</div>
+            ) : users.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">No users found</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Joined</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {users.map(userItem => (
+                      <tr key={userItem.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 text-sm">{userItem.id}</td>
+                        <td className="px-6 py-4 text-sm font-medium">{userItem.name || userItem.username}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{userItem.email}</td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            userItem.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {userItem.role || 'user'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {userItem.created_at ? new Date(userItem.created_at).toLocaleDateString() : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4">
+                          {userItem.role !== 'admin' && (
+                            <button
+                              onClick={() => handleDeleteUser(userItem.id)}
+                              className="flex items-center gap-1 text-red-600 hover:text-red-900"
+                            >
+                              <Trash2 size={16} />
+                              Delete
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Listings Tab */}
+        {activeTab === 'listings' && (
+          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+            <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
+              <h2 className="text-xl font-bold">Listings</h2>
+              <button
+                onClick={fetchListings}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <RefreshCw size={16} />
+                Refresh
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="p-8 text-center">Loading...</div>
+            ) : listings.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">No listings found</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {listings.map(listing => (
+                      <tr key={listing.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 text-sm">{listing.id}</td>
+                        <td className="px-6 py-4 text-sm">
+                          <div className="max-w-xs truncate">{listing.description || 'No description'}</div>
+                        </td>
+                        <td className="px-6 py-4 text-sm">
+                          {listing.seller_username || listing.buyer_username || 'Unknown'}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            listing.status === 'completed' ? 'bg-green-100 text-green-800' :
+                            listing.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                            'bg-blue-100 text-blue-800'
+                          }`}>
+                            {listing.status || 'active'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {listing.created_at ? new Date(listing.created_at).toLocaleDateString() : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4">
+                          <button
+                            onClick={() => handleDeleteListing(listing.id)}
+                            className="flex items-center gap-1 text-red-600 hover:text-red-900"
+                          >
+                            <Trash2 size={16} />
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Testimonials Tab */}
+        {activeTab === 'testimonials' && (
+          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+            <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
+              <h2 className="text-xl font-bold">Testimonials</h2>
+              <button
+                onClick={fetchTestimonials}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <RefreshCw size={16} />
+                Refresh
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="p-8 text-center">Loading...</div>
+            ) : testimonials.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">No testimonials found</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Text</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {testimonials.map(testimonial => (
+                      <tr key={testimonial.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 text-sm">{testimonial.id}</td>
+                        <td className="px-6 py-4 text-sm font-medium">{testimonial.name}</td>
+                        <td className="px-6 py-4 text-sm">{testimonial.location}</td>
+                        <td className="px-6 py-4 text-sm">{testimonial.rating} ⭐</td>
+                        <td className="px-6 py-4 text-sm">
+                          <div className="max-w-xs truncate">{testimonial.text}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex gap-1">
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              testimonial.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {testimonial.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                            {testimonial.isVerified && (
+                              <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+                                Verified
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <button
+                            onClick={() => handleDeleteTestimonial(testimonial.id)}
+                            className="flex items-center gap-1 text-red-600 hover:text-red-900"
+                          >
+                            <Trash2 size={16} />
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Simple Admin Login Component
+const AdminLogin = ({ onLoginSuccess }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+
+      const result = await response.json();
+
+      // Handle your API structure: { success, token, user }
+      if (result.success && result.user?.role === 'admin') {
+        localStorage.setItem('adminToken', result.token);
+        localStorage.setItem('adminUser', JSON.stringify(result.user));
+        onLoginSuccess(result.user);
+      } else if (result.success) {
+        setError('Admin access required');
+      } else {
+        setError(result.error || 'Login failed');
+      }
+    } catch (err) {
+      setError('Login failed: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="bg-white p-8 rounded-lg shadow-md w-96">
+        <h1 className="text-2xl font-bold text-center mb-6">Admin Login</h1>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">Email</label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg"
+              placeholder="admin@example.com"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Password</label>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg"
+              placeholder="Your password"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {loading ? 'Logging in...' : 'Sign In'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 };

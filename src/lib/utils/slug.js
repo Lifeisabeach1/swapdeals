@@ -1,58 +1,47 @@
-// src/lib/utils/slug.js
-
 /**
- * Generate a URL-friendly slug from a title
- * @param {string} title - The title to convert to slug
- * @param {number} maxLength - Maximum length of the slug (default: 50)
- * @returns {string} - URL-friendly slug
+ * Generate a URL-friendly slug from text
+ * @param {string} text - Text to convert to slug
+ * @returns {string} URL-friendly slug
  */
-export function generateSlug(title, maxLength = 50) {
-  if (!title || typeof title !== 'string') {
-    return `untitled-${Date.now()}`;
-  }
-
-  const slug = title
+export function generateSlug(text) {
+  if (!text) return '';
+  
+  return text
+    .toString()
     .toLowerCase()
     .trim()
-    // Replace Swedish characters
     .replace(/å/g, 'a')
     .replace(/ä/g, 'a')
     .replace(/ö/g, 'o')
-    // Remove special characters except spaces and hyphens
-    .replace(/[^a-z0-9\s-]/g, '')
-    // Replace multiple spaces with single space
-    .replace(/\s+/g, ' ')
-    // Replace spaces with hyphens
-    .replace(/\s/g, '-')
-    // Replace multiple hyphens with single hyphen
-    .replace(/-+/g, '-')
-    // Remove leading/trailing hyphens
-    .replace(/^-+|-+$/g, '')
-    // Limit length
-    .substring(0, maxLength);
-
-  // Ensure we have something
-  const finalSlug = slug || 'untitled';
-  
-  // Add timestamp for uniqueness
-  return `${finalSlug}-${Date.now()}`;
+    .replace(/Å/g, 'a')
+    .replace(/Ä/g, 'a')
+    .replace(/Ö/g, 'o')
+    .replace(/\s+/g, '-')
+    .replace(/[^\w\-]+/g, '')
+    .replace(/\-\-+/g, '-')
+    .replace(/^-+/, '')
+    .replace(/-+$/, '');
 }
 
 /**
- * Parse slug to extract potential ID or timestamp
- * @param {string} slug - The slug to parse
- * @returns {object} - Parsed slug information
+ * Generate a unique slug by appending a random string
+ * @param {string} text - Text to convert to slug
+ * @param {number} length - Length of random string (default: 6)
+ * @returns {string} Unique slug
  */
-export function parseSlug(slug) {
-  if (!slug) return { originalSlug: null, timestamp: null, baseSlug: null };
+export function generateUniqueSlug(text, length = 6) {
+  const baseSlug = generateSlug(text);
+  const randomString = Math.random().toString(36).substring(2, 2 + length);
+  return `${baseSlug}-${randomString}`;
+}
 
-  const parts = slug.split('-');
-  const lastPart = parts[parts.length - 1];
-  const isTimestamp = /^\d{13}$/.test(lastPart); // 13 digits for timestamp
-
-  return {
-    originalSlug: slug,
-    timestamp: isTimestamp ? parseInt(lastPart) : null,
-    baseSlug: isTimestamp ? parts.slice(0, -1).join('-') : slug
-  };
+/**
+ * Create slug from title with ID
+ * @param {string} title - Title text
+ * @param {number|string} id - ID to append
+ * @returns {string} Slug with ID
+ */
+export function createSlugWithId(title, id) {
+  const slug = generateSlug(title);
+  return `${slug}-${id}`;
 }

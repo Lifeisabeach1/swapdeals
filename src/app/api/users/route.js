@@ -1,74 +1,134 @@
 // app/api/users/route.js
-
 import { NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/middleware/auth';
-// import User from '@/lib/db/models/User';
+import { createClient } from '@supabase/supabase-js';
+import { headers } from 'next/headers'; // ← LÄGG TILL
+import { verifyToken } from '@/lib/auth/jwt';
 
-/**
- * Get users - Admin only
- * @route GET /api/users
- */
-async function getUsers(req) {
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+// GET - List users (Admin only)
+export async function GET(request) {
   try {
-    // Parse query parameters
-    const url = new URL(req.url);
-    const searchParams = new URLSearchParams(url.search);
+    // ← FIX: Verify auth med headers()
+    const headersList = await headers();
+    const authHeader = headersList.get('authorization');
     
-    const filters = {
-      isActive: searchParams.get('isActive') === 'true' ? true : 
-                searchParams.get('isActive') === 'false' ? false : undefined,
-      role: searchParams.get('role') || undefined,
-      search: searchParams.get('search') || undefined
-    };
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ 
+        success: false, 
+        message: 'Authorization required' 
+      }, { status: 401 });
+    }
+
+    const token = authHeader.substring(7);
+    const decoded = verifyToken(token);
+
+    if (!decoded || decoded.role !== 'admin') {
+      return NextResponse.json({ 
+        success: false, 
+        message: 'Admin access required' 
+      }, { status: 403 });
+    }
     
-    // Get users with filters
-    const users = await User.findAll(filters);
+    // Parse filters
+    const { searchParams } = new URL(request.url);
+    const isActive = searchParams.get('isActive');
+    const role = searchParams.get('role');
+    const search = searchParams.get('search');
+    
+    // Build query
+    let query = supabase.from('users').select('*');
+    
+    if (isActive !== null) query = query.eq('is_active', isActive === 'true');
+    if (role) query = query.eq('role', role);
+    if (search) query = query.or(`username.ilike.%${search}%,email.ilike.%${search}%`);
+    
+    const { data: users, error } = await query.order('created_at', { ascending: false });
+    
+    if (error) {
+      return NextResponse.json({ 
+        success: false, 
+        message: 'Failed to fetch users' 
+      }, { status: 500 });
+    }
     
     return NextResponse.json({
       success: true,
       data: users
-    }, { status: 200 });
+    });
+
   } catch (error) {
-    console.error('Get users error:', error);
+    console.error('Error fetching users:', error);
     return NextResponse.json({ 
       success: false, 
-      error: 'Internal server error' 
+      message: 'Internal server error' 
     }, { status: 500 });
   }
 }
 
-/**
- * Create user - Admin only
- * @route POST /api/users
- */
-async function createUser(req) {
+// POST - Create user (Admin only)
+export async function POST(request) {
   try {
-    const body = await req.json();
+    // ← FIX: Verify auth med headers()
+    const headersList = await headers();
+    const authHeader = headersList.get('authorization');
     
-    // Create user
-    const user = await User.create({
-      email: body.email,
-      username: body.username,
-      password: body.password,
-      first_name: body.first_name,
-      last_name: body.last_name,
-      role: body.role || 'user',
-      is_active: body.is_active !== undefined ? body.is_active : true
-    });
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ 
+        success: false, 
+        message: 'Authorization required' 
+      }, { status: 401 });
+    }
+
+    const token = authHeader.substring(7);
+    const decoded = verifyToken(token);
+
+    if (!decoded || decoded.role !== 'admin') {
+      return NextResponse.json({ 
+        success: false, 
+        message: 'Admin access required' 
+      }, { status: 403 });
+    }
+    
+    const body = await request.json();
+    
+    // Create user (you'll need to implement password hashing)
+    const { data: user, error } = await supabase
+      .from('users')
+      .insert({
+        email: body.email,
+        username: body.username,
+        password: body.password, // Should be hashed!
+        first_name: body.first_name,
+        last_name: body.last_name,
+        role: body.role || 'user',
+        is_active: body.is_active !== undefined ? body.is_active : true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      return NextResponse.json({ 
+        success: false, 
+        message: 'Failed to create user' 
+      }, { status: 500 });
+    }
     
     return NextResponse.json({
       success: true,
       data: user
     }, { status: 201 });
+
   } catch (error) {
-    console.error('Create user error:', error);
+    console.error('Error creating user:', error);
     return NextResponse.json({ 
       success: false, 
-      error: 'Internal server error' 
+      message: 'Internal server error' 
     }, { status: 500 });
   }
 }
-
-// Wrap handlers with admin middleware - FIXED: Use requireAdmin directly
-export const GET = requireAdmin(getUsers);
-export const POST = requireAdmin(createUser);

@@ -1,24 +1,37 @@
 // lib/utils/admin.js
-import { knex } from '@/lib/db/index.js';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 export class AdminUtils {
   // Promote user to admin
   static async promoteToAdmin(userId) {
     try {
-      const user = await knex('users')
-        .where('id', userId)
-        .first();
+      const { data: user, error: fetchError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
 
-      if (!user) {
+      if (fetchError || !user) {
         throw new Error(`User with ID ${userId} not found`);
       }
 
-      await knex('users')
-        .where('id', userId)
+      const { error: updateError } = await supabase
+        .from('users')
         .update({
           role: 'admin',
-          updated_at: new Date()
-        });
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId);
+
+      if (updateError) {
+        throw updateError;
+      }
 
       console.log(`User ${user.username} (ID: ${userId}) promoted to admin`);
       return user;
@@ -31,20 +44,27 @@ export class AdminUtils {
   // Demote admin to regular user
   static async demoteFromAdmin(userId) {
     try {
-      const user = await knex('users')
-        .where('id', userId)
-        .first();
+      const { data: user, error: fetchError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
 
-      if (!user) {
+      if (fetchError || !user) {
         throw new Error(`User with ID ${userId} not found`);
       }
 
-      await knex('users')
-        .where('id', userId)
+      const { error: updateError } = await supabase
+        .from('users')
         .update({
           role: 'user',
-          updated_at: new Date()
-        });
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId);
+
+      if (updateError) {
+        throw updateError;
+      }
 
       console.log(`User ${user.username} (ID: ${userId}) demoted from admin`);
       return user;
@@ -57,10 +77,16 @@ export class AdminUtils {
   // Check if user is admin
   static async isAdmin(userId) {
     try {
-      const user = await knex('users')
+      const { data: user, error } = await supabase
+        .from('users')
         .select('role')
-        .where('id', userId)
-        .first();
+        .eq('id', userId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error checking admin status:', error);
+        return false;
+      }
 
       return user?.role === 'admin';
     } catch (error) {
@@ -72,12 +98,17 @@ export class AdminUtils {
   // Get all admins
   static async getAllAdmins() {
     try {
-      const admins = await knex('users')
-        .select('id', 'username', 'email', 'first_name', 'last_name', 'created_at')
-        .where('role', 'admin')
-        .where('is_active', true);
+      const { data: admins, error } = await supabase
+        .from('users')
+        .select('id, username, email, first_name, last_name, created_at')
+        .eq('role', 'admin')
+        .eq('is_active', true);
 
-      return admins;
+      if (error) {
+        throw error;
+      }
+
+      return admins || [];
     } catch (error) {
       console.error('Error fetching admins:', error);
       throw error;
@@ -88,11 +119,14 @@ export class AdminUtils {
 // Console script to promote first user to admin (for initial setup)
 export const promoteFirstUserToAdmin = async () => {
   try {
-    const firstUser = await knex('users')
-      .orderBy('id', 'asc')
-      .first();
+    const { data: firstUser, error } = await supabase
+      .from('users')
+      .select('*')
+      .order('id', { ascending: true })
+      .limit(1)
+      .single();
 
-    if (!firstUser) {
+    if (error || !firstUser) {
       console.log('No users found in database');
       return;
     }

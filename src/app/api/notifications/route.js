@@ -1,45 +1,38 @@
-// app/api/notifications/route.js
-import { NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
 
-// JWT verification function
-const verifyToken = (token) => {
+// ============================================
+// app/api/notifications/count/route.js
+// ============================================
+
+export async function GET_COUNT(request) {
   try {
-    if (!token) return null;
-    return jwt.verify(token, process.env.JWT_SECRET);
-  } catch (error) {
-    console.error('Token verification error:', error);
-    return null;
-  }
-};
-
-export async function GET(request) {
-  try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '');
-    const user = verifyToken(token);
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Verify auth
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Authorization required' }, { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const unreadOnly = searchParams.get('unread_only') === 'true';
-    const limit = parseInt(searchParams.get('limit')) || 20;
-    const offset = parseInt(searchParams.get('offset')) || 0;
+    const token = authHeader.substring(7);
+    const decoded = verifyToken(token);
 
-    const notifications = await NotificationService.getUserNotifications(
-      user.id,
-      { limit, offset, unreadOnly }
-    );
+    if (!decoded) {
+      return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
+    }
+
+    // TODO: Implement NotificationService or direct Supabase query
+    // const count = await NotificationService.getUnreadCount(decoded.id);
+
+    // Placeholder response - replace with actual implementation
+    const count = 0;
 
     return NextResponse.json({
       success: true,
-      data: notifications
+      data: { count }
     });
+
   } catch (error) {
-    console.error('Error fetching notifications:', error);
+    console.error('Error fetching notification count:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch notifications' },
+      { success: false, error: 'Failed to fetch notification count' },
       { status: 500 }
     );
   }

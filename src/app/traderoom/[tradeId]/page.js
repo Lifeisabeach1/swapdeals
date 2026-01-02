@@ -1,11 +1,10 @@
-// src/app/trade/[tradeId]/page.js
+// src/app/traderoom/[tradeId]/page.js
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
 import { useAuth } from '@/hooks/useAuth';
-import useApi from '@/hooks/useApi';
 import TradeConversation from '@/components/TradeConversation';
 import Alert from '@/components/Alert';
 
@@ -38,7 +37,6 @@ export default function TradePage() {
   const tradeId = params.tradeId;
   
   const { user, isAuthenticated, token } = useAuth();
-  const api = useApi(token);
 
   // Mount effect
   useEffect(() => {
@@ -89,39 +87,69 @@ export default function TradePage() {
 
     imageSources.forEach(({ key, source, type }) => {
       if (tradeData[key] && Array.isArray(tradeData[key])) {
-        tradeData[key].forEach(img => {
-          if (img?.url && !seenUrls.has(img.url)) {
-            seenUrls.add(img.url);
-            allImages.push({ ...img, source, type });
+        tradeData[key].forEach((img, index) => {
+          // Handle different image formats
+          let imageUrl = null;
+          let imageData = null;
+
+          if (typeof img === 'string') {
+            // Image is a plain string (URL or base64)
+            imageUrl = img;
+            imageData = { url: img, id: `${key}-${index}` };
+          } else if (img && typeof img === 'object' && img.url) {
+            // Image is an object with url property
+            imageUrl = img.url;
+            imageData = img;
+          }
+
+          // Add to results if we have a valid URL and haven't seen it before
+          if (imageUrl && !seenUrls.has(imageUrl)) {
+            seenUrls.add(imageUrl);
+            allImages.push({ 
+              ...imageData, 
+              source, 
+              type,
+              // Ensure id exists
+              id: imageData.id || `${key}-${index}`
+            });
           }
         });
       }
     });
     
+    console.log('All trade images:', allImages);
     return allImages;
   };
 
   const tradeImages = useMemo(() => getAllTradeImages(trade), [trade]);
 
-  // Data Loading
-  useEffect(() => {
-    if (tradeId && token) {
-      loadTrade();
-    }
-  }, [tradeId, token]);
-
-  const loadTrade = async () => {
+  // FIXED: Data Loading - using fetch directly instead of api
+  const loadTrade = useCallback(async () => {
+    if (!tradeId || !token) return;
+    
     try {
       setLoading(true);
       setError(null);
       
-      const response = await api.get(`/api/traderoom/${tradeId}`);
+      const response = await fetch(`/api/traderoom/${tradeId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        cache: 'no-store'
+      });
       
-      if (response.success) {
-        console.log('Trade data loaded:', response.data);
-        setTrade(response.data);
+      if (!response.ok) {
+        throw new Error('Failed to fetch trade');
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log('Trade data loaded:', data.data);
+        setTrade(data.data);
       } else {
-        setError(response.message || 'Kunde inte ladda handeln');
+        setError(data.message || 'Kunde inte ladda handeln');
       }
     } catch (error) {
       console.error('Failed to load trade:', error);
@@ -129,16 +157,34 @@ export default function TradePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [tradeId, token]);
 
-  // Trade Actions
+  useEffect(() => {
+    if (tradeId && token) {
+      loadTrade();
+    }
+  }, [tradeId, token, loadTrade]);
+
+  // FIXED: Trade Actions - using fetch directly
   const handleTradeAction = async (action, endpoint, successMessage) => {
-    if (!trade) return;
+    if (!trade || !token) return;
 
     try {
-      const response = await api.post(`/api/traderoom/${trade.id}/${endpoint}`);
+      const response = await fetch(`/api/traderoom/${trade.id}/${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
       
-      if (response.success) {
+      if (!response.ok) {
+        throw new Error('Failed to perform action');
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
         if (action === 'complete') {
           setTrade(prev => ({ ...prev, status: 'completed' }));
           showAlert(successMessage, 'success', '✅ Handel Slutförd!');
@@ -149,7 +195,7 @@ export default function TradePage() {
           setTimeout(() => router.push('/'), 3000);
         }
       } else {
-        throw new Error(response.message || `Kunde inte ${action === 'complete' ? 'slutföra' : 'avbryta'} bytet`);
+        throw new Error(data.message || `Kunde inte ${action === 'complete' ? 'slutföra' : 'avbryta'} bytet`);
       }
     } catch (error) {
       showAlert(`Kunde inte ${action === 'complete' ? 'slutföra' : 'avbryta'} bytet: ${error.message}`, 'error', '❌ Åtgärd Misslyckades');
@@ -226,8 +272,8 @@ export default function TradePage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-green-50/30 flex items-center justify-center">
         <div className="text-center">
-          <div className="relative">
-            <div className="animate-spin rounded-full h-32 w-32 border-4 border-green-200 border-t-green-600 mx-auto"></div>
+          <div className="relative w-32 h-32 mx-auto">
+            <div className="animate-spin rounded-full h-32 w-32 border-4 border-green-200 border-t-green-600"></div>
             <div className="absolute inset-0 flex items-center justify-center">
               <Image
                 src="/Swapdealsemoji.png"
@@ -370,11 +416,13 @@ export default function TradePage() {
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {tradeImages.filter(img => img.source === 'listing').map((image, index) => (
-                      <div key={image.id || `listing-${index}`} className="overflow-hidden rounded-2xl shadow-lg border border-gray-200">
-                        <img
+                      <div key={image.id || `listing-${index}`} className="relative overflow-hidden rounded-2xl shadow-lg border border-gray-200 h-64">
+                        <Image
                           src={image.url}
                           alt={`${trade.listing_title} - Bild ${index + 1}`}
-                          className="w-full h-64 object-contain bg-gray-50"
+                          fill
+                          className="object-contain bg-gray-50"
+                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                         />
                       </div>
                     ))}
@@ -421,11 +469,13 @@ export default function TradePage() {
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {tradeImages.filter(img => img.source === 'offer').map((image, index) => (
-                      <div key={image.id || `offer-${index}`} className="overflow-hidden rounded-2xl shadow-lg border border-gray-200">
-                        <img
+                      <div key={image.id || `offer-${index}`} className="relative overflow-hidden rounded-2xl shadow-lg border border-gray-200 h-64">
+                        <Image
                           src={image.url}
                           alt={`Handelserbjudande - Bild ${index + 1}`}
-                          className="w-full h-64 object-contain bg-gray-50"
+                          fill
+                          className="object-contain bg-gray-50"
+                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                         />
                       </div>
                     ))}
@@ -604,7 +654,6 @@ export default function TradePage() {
         />
       )}
 
-
       {/* Custom Confirmation Dialog */}
       {confirmation.show && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[70] p-4">
@@ -635,7 +684,7 @@ export default function TradePage() {
                   onClick={() => {
                     confirmation.onConfirm?.();
                   }}
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-red-green hover:to-green-700 text-white font-semibold rounded-lg transition-all duration-200"
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold rounded-lg transition-all duration-200"
                 >
                   Acceptera
                 </button>

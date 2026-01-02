@@ -1,90 +1,84 @@
 
-// src/app/api/trades/[tradeId]/cancel/route.js
+// ============================================
+// app/api/trades/[tradeId]/cancel/route.js
+// ============================================
 import { NextResponse } from 'next/server';
-import { knex } from '@/lib/db/index.js';
-import jwt from 'jsonwebtoken';
+import { createClient } from '@supabase/supabase-js';
+import { headers } from 'next/headers'; // ← LÄGG TILL
+import { verifyToken } from '@/lib/auth/jwt';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 export async function POST(request, { params }) {
   try {
-    // Await params before accessing properties
     const { tradeId } = await params;
-    const body = await request.json();
-    const { reason } = body;
     
-    // Get auth token
-    const authHeader = request.headers.get('authorization');
+    // ← FIX: Verify auth
+    const headersList = await headers();
+    const authHeader = headersList.get('authorization');
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({
         success: false,
-        message: 'Authorization token required'
+        message: 'Authorization required'
       }, { status: 401 });
     }
 
     const token = authHeader.substring(7);
+    const decoded = verifyToken(token);
 
-    // Verify token and get user
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (tokenError) {
-      console.error('Token verification failed:', tokenError);
+    if (!decoded) {
       return NextResponse.json({
         success: false,
         message: 'Invalid or expired token'
       }, { status: 401 });
     }
 
-    const userId = decoded.id;
-
-    // Check if trade exists and user is part of it
-    const trade = await knex('trades')
+    // Get trade (either buyer or seller can cancel)
+    const { data: trade, error: tradeError } = await supabase
+      .from('trades')
       .select('*')
-      .where('id', tradeId)
-      .andWhere(function() {
-        this.where('buyer_id', userId).orWhere('seller_id', userId);
-      })
-      .andWhere('status', 'in', ['accepted', 'in_progress'])
-      .first();
+      .eq('id', tradeId)
+      .or(`seller_id.eq.${decoded.id},buyer_id.eq.${decoded.id}`)
+      .eq('status', 'accepted')
+      .single();
 
-    if (!trade) {
+    if (tradeError || !trade) {
       return NextResponse.json({
         success: false,
-        message: 'Trade not found, access denied, or trade cannot be cancelled'
+        message: 'Trade not found or access denied'
       }, { status: 404 });
     }
 
-    // Cancel the trade
-    const updatedTrade = await knex('trades')
-      .where('id', tradeId)
+    const now = new Date().toISOString();
+
+    // Cancel trade
+    const { data: updatedTrade, error } = await supabase
+      .from('trades')
       .update({
         status: 'cancelled',
-        cancelled_at: knex.fn.now(),
-        cancelled_by: userId,
-        cancellation_reason: reason || 'User cancelled',
-        updated_at: knex.fn.now()
+        cancelled_at: now,
+        updated_at: now
       })
-      .returning('*');
+      .eq('id', tradeId)
+      .select()
+      .single();
 
-    // Also update the original offer status back to cancelled
-    // Check what statuses are allowed for trade_offers first
-    if (trade.offer_id) {
-      try {
-        await knex('trade_offers')
-          .where('id', trade.offer_id)
-          .update({
-            status: 'rejected', // Use 'rejected' instead of 'cancelled' if constraint doesn't allow 'cancelled'
-            updated_at: knex.fn.now()
-          });
-      } catch (offerUpdateError) {
-        console.warn('Could not update offer status:', offerUpdateError.message);
-        // Continue execution even if offer update fails
-      }
+    if (error) {
+      console.error('Error cancelling trade:', error);
+      return NextResponse.json({
+        success: false,
+        message: 'Failed to cancel trade',
+        error: error.message
+      }, { status: 500 });
     }
 
     return NextResponse.json({
       success: true,
-      data: updatedTrade[0],
+      data: updatedTrade,
       message: 'Trade cancelled successfully'
     });
 

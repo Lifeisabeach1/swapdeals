@@ -1,83 +1,46 @@
-// components/LoginForm.jsx - Production Improvements
+// components/LoginForm.jsx
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { Lock, X, User, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Lock, User, CheckCircle, Loader2, Mail } from 'lucide-react';
 
-export default function LoginForm({ 
-  isOpen, 
-  onClose, 
-  onSuccess, 
-  onSwitchToRegister,
-  className = '',
-  'aria-labelledby': ariaLabelledBy = 'login-modal-title'
-}) {
+export default function LoginForm({ isOpen, onClose, onSwitchToRegister }) {
   const { login, isLoading, error, clearError } = useAuth();
   
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
+  const [formData, setFormData] = useState({ 
+    email: '', 
+    password: '',
+    rememberMe: false 
   });
-
-  const [validationErrors, setValidationErrors] = useState({});
-  const [rememberMe, setRememberMe] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [showSuccess, setShowSuccess] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState(null);
-  const [attemptCount, setAttemptCount] = useState(0);
-  
-  // Refs for focus management
-  const firstFocusableRef = useRef(null);
-  const emailInputRef = useRef(null);
-
-  // Focus management for accessibility
-  useEffect(() => {
-    if (isOpen && emailInputRef.current) {
-      const timer = setTimeout(() => {
-        emailInputRef.current?.focus();
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [isOpen]);
-
-  // Clear errors when modal closes
-  useEffect(() => {
-    if (!isOpen) {
-      clearError?.();
-      setValidationErrors({});
-      setAttemptCount(0);
-    }
-  }, [isOpen, clearError]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value.trim() // Trim whitespace
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({ 
+      ...prev, 
+      [name]: type === 'checkbox' ? checked : value 
     }));
     
-    // Clear validation error when user starts typing
-    if (validationErrors[name]) {
-      setValidationErrors(prev => ({
-        ...prev,
-        [name]: ''
-      }));
+    // Clear field-specific error
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
     }
     
-    // Clear auth error when user modifies form
-    if (error) {
-      clearError?.();
-    }
+    // Clear API error
+    clearError();
   };
 
-  const validateForm = () => {
+  const validate = () => {
     const newErrors = {};
 
-    // Email validation with better regex
-    if (!formData.email) {
-      newErrors.email = 'E-postadress krävs';
+    // Email validation
+    if (!formData.email.trim()) {
+      newErrors.email = 'E-post krävs';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Vänligen ange en giltig e-postadress';
+      newErrors.email = 'Giltig e-postadress krävs';
     }
 
     // Password validation
@@ -92,288 +55,221 @@ export default function LoginForm({
 
   const handleSubmit = async (e) => {
     e?.preventDefault();
-    
-    // Rate limiting check
-    if (attemptCount >= 5) {
-      setValidationErrors({ 
-        submit: 'För många inloggningsförsök. Vänligen vänta innan du försöker igen.' 
-      });
+
+    // Validate form
+    const validationErrors = validate();
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
       return;
     }
 
-    const errors = validateForm();
-    if (Object.keys(errors).length > 0) {
-      setValidationErrors(errors);
-      return;
-    }
+    // Submit login
+    const result = await login({
+      email: formData.email.trim().toLowerCase(),
+      password: formData.password
+    });
 
-    setAttemptCount(prev => prev + 1);
-
-    try {
-      const result = await login({
-        email: formData.email,
-        password: formData.password,
-        rememberMe: rememberMe
-      });
-
-      if (result) {
-        setLoggedInUser({
-          email: formData.email,
-          username: result.user?.username || result.user?.name || formData.email.split('@')[0],
-          user: result.user
-        });
-        
-        // Reset form
-        setFormData({ email: '', password: '' });
-        setValidationErrors({});
-        setAttemptCount(0);
-        
-        setShowSuccessModal(true);
-      }
-    } catch (err) {
-      // Error is handled by useAuth hook
-      console.error('Login error:', err);
+    if (result) {
+      setLoggedInUser(result.user);
+      setShowSuccess(true);
+      setFormData({ email: '', password: '', rememberMe: false });
+      setErrors({});
     }
   };
 
-  const handleSuccessModalClose = () => {
-    setShowSuccessModal(false);
+  const handleSuccessClose = () => {
+    setShowSuccess(false);
     onClose();
-    
-    if (onSuccess && loggedInUser) {
-      onSuccess(loggedInUser.user);
-    }
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Escape') {
-      if (showSuccessModal) {
-        handleSuccessModalClose();
-      } else {
-        onClose();
-      }
-    }
-    
-    if (e.key === 'Enter' && !isLoading) {
-      handleSubmit(e);
-    }
-  };
+  if (!isOpen && !showSuccess) return null;
 
-  const handleBackdropClick = (e) => {
-    if (e.target === e.currentTarget) {
-      if (showSuccessModal) {
-        handleSuccessModalClose();
-      } else {
-        onClose();
-      }
-    }
-  };
-
-  // Success Modal Component
-  const SuccessModal = () => (
-    <div 
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4"
-      onClick={handleBackdropClick}
-      onKeyDown={handleKeyDown}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="success-modal-title"
-    >
-      <div 
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-md transform animate-in slide-in-from-bottom-4 duration-300"
-        style={{
-          background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
-        }}
-      >
-        <div className="text-center pt-8 pb-4">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-b from-green-400 to-green-500 rounded-full mx-auto mb-4 shadow-lg">
-            <User className="w-10 h-10 text-white" aria-hidden="true" />
-          </div>
-          
-          <h3 id="success-modal-title" className="text-2xl font-bold text-gray-800 mb-2">
-            Välkommen tillbaka!
-          </h3>
-          <p className="text-gray-600 px-6 leading-relaxed">
-            Du har loggat in på ditt konto. Redo att börja byta?
-          </p>
-        </div>
-
-        <div className="px-6 py-4">
-          <div className="bg-white/70 rounded-lg p-4 border border-green-200">
-            <div className="flex items-center text-sm text-gray-700">
-              <span className="font-medium text-gray-800">Inloggad som:</span>
-              <span className="ml-2 font-semibold text-green-700">{loggedInUser?.username}</span>
+  // Success Modal
+  if (showSuccess) {
+    return (
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-200">
+        <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl shadow-2xl w-full max-w-md p-8 animate-in zoom-in duration-300">
+          <div className="text-center">
+            {/* Success Icon */}
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-green-400 to-green-600 rounded-full mb-6 shadow-lg animate-in zoom-in duration-500">
+              <CheckCircle className="w-10 h-10 text-white" strokeWidth={2.5} />
             </div>
-          </div>
-        </div>
+            
+            {/* Welcome Message */}
+            <h3 className="text-2xl font-bold text-gray-900 mb-3">
+              Välkommen tillbaka! 👋
+            </h3>
+            <p className="text-gray-600 mb-6 text-base">
+              Du har loggat in på ditt konto.
+            </p>
 
-        <div className="px-6 pb-8">
-          <button
-            onClick={handleSuccessModalClose}
-            className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-200 hover:from-green-600 hover:to-green-700 transform hover:-translate-y-0.5 shadow-md"
-            autoFocus
-          >
-            Gå vidare
-          </button>
-          
-          <p className="text-xs text-gray-500 text-center mt-3">
-            Välkommen till din bytes plattform
-          </p>
+            {/* User Info Card */}
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-green-200/50 shadow-sm mb-8">
+              <div className="flex items-center justify-center gap-3">
+                <div className="p-2 bg-green-100 rounded-full">
+                  <User className="w-4 h-4 text-green-600" />
+                </div>
+                <div className="text-left">
+                  <div className="text-xs text-gray-600 font-medium">Inloggad som</div>
+                  <div className="text-sm font-bold text-green-700">
+                    {loggedInUser?.username || loggedInUser?.email}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Close Button */}
+            <button
+              onClick={handleSuccessClose}
+              className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95"
+            >
+              Fortsätt
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  );
-
-  if (!isOpen && !showSuccessModal) return null;
-
-  if (showSuccessModal) {
-    return <SuccessModal />;
+    );
   }
 
-  const displayError = error || validationErrors.submit;
-
+  // Login Form
   return (
-    <div 
-      className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 ${className}`}
-      onClick={handleBackdropClick}
-      onKeyDown={handleKeyDown}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={ariaLabelledBy}
-    >
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md animate-in slide-in-from-bottom-4 duration-300">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-in zoom-in duration-300">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <div className="flex items-center">
-            <div className="flex items-center justify-center mr-3 bg-gradient-to-b from-green-100 to-green-200 rounded-full p-2 shadow-sm">
-              <Lock className="w-5 h-5 text-green-600" aria-hidden="true" />
+        <div className="sticky top-0 bg-white z-10 flex items-center justify-between p-6 border-b border-gray-200 rounded-t-2xl">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-gradient-to-br from-green-100 to-emerald-100 rounded-xl shadow-sm">
+              <Lock className="w-5 h-5 text-green-600" />
             </div>
             <div>
-              <h2 id={ariaLabelledBy} className="text-2xl font-bold text-gray-800">
-                Välkommen tillbaka
-              </h2>
-              <p className="text-gray-600 text-sm mt-1">Logga in på ditt konto</p>
+              <h2 className="text-2xl font-bold text-gray-900">Välkommen tillbaka</h2>
+              <p className="text-sm text-gray-600">Logga in på ditt konto</p>
             </div>
           </div>
-          <button
-            ref={firstFocusableRef}
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500"
-            aria-label="Stäng dialog"
+          <button 
+            onClick={onClose} 
+            disabled={isLoading}
+            className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
           >
-            <X className="w-5 h-5" aria-hidden="true" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {displayError && (
-            <div 
-              className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md flex items-start gap-2"
-              role="alert"
-              aria-live="polite"
-            >
-              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
-              <span>{displayError}</span>
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* API Error Message */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2 animate-in slide-in-from-top duration-300">
+              <span className="text-red-500 font-bold">⚠️</span>
+              <span>{error}</span>
             </div>
           )}
 
+          {/* Email Field */}
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-              E-postadress <span className="text-red-500" aria-label="obligatorisk">*</span>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              E-postadress <span className="text-red-500">*</span>
             </label>
-            <input
-              ref={emailInputRef}
-              type="email"
-              id="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors ${
-                validationErrors.email ? 'border-red-300 bg-red-50' : 'border-gray-300'
-              }`}
-              placeholder="Ange din e-postadress"
-              autoComplete="email"
-              required
-              aria-describedby={validationErrors.email ? 'email-error' : undefined}
-              aria-invalid={validationErrors.email ? 'true' : 'false'}
-            />
-            {validationErrors.email && (
-              <p id="email-error" className="text-red-600 text-sm mt-1" role="alert">
-                {validationErrors.email}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-              Lösenord <span className="text-red-500" aria-label="obligatorisk">*</span>
-            </label>
-            <input
-              type="password"
-              id="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors ${
-                validationErrors.password ? 'border-red-300 bg-red-50' : 'border-gray-300'
-              }`}
-              placeholder="Ange ditt lösenord"
-              autoComplete="current-password"
-              required
-              aria-describedby={validationErrors.password ? 'password-error' : undefined}
-              aria-invalid={validationErrors.password ? 'true' : 'false'}
-            />
-            {validationErrors.password && (
-              <p id="password-error" className="text-red-600 text-sm mt-1" role="alert">
-                {validationErrors.password}
-              </p>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <Mail className="w-5 h-5" />
+              </div>
               <input
-                type="checkbox"
-                id="rememberMe"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                disabled={isLoading}
+                className={`w-full pl-11 pr-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all disabled:bg-gray-50 disabled:cursor-not-allowed ${
+                  errors.email ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                }`}
+                placeholder="din@email.se"
+                autoComplete="email"
               />
-              <label htmlFor="rememberMe" className="ml-2 text-sm text-gray-700">
-                Kom ihåg mig
-              </label>
             </div>
-            <button
-              type="button"
-              className="text-sm text-green-600 hover:text-green-700 underline focus:outline-none focus:ring-2 focus:ring-green-500 rounded"
+            {errors.email && (
+              <p className="text-red-600 text-sm mt-1.5 flex items-center gap-1">
+                <span>•</span> {errors.email}
+              </p>
+            )}
+          </div>
+
+          {/* Password Field */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Lösenord <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <Lock className="w-5 h-5" />
+              </div>
+              <input
+                type="password"
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                disabled={isLoading}
+                className={`w-full pl-11 pr-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all disabled:bg-gray-50 disabled:cursor-not-allowed ${
+                  errors.password ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                }`}
+                placeholder="Ditt lösenord"
+                autoComplete="current-password"
+              />
+            </div>
+            {errors.password && (
+              <p className="text-red-600 text-sm mt-1.5 flex items-center gap-1">
+                <span>•</span> {errors.password}
+              </p>
+            )}
+          </div>
+
+          {/* Remember Me & Forgot Password */}
+          <div className="flex items-center justify-between text-sm pt-1">
+            <label className="flex items-center gap-2 cursor-pointer group">
+              <input 
+                type="checkbox" 
+                name="rememberMe"
+                checked={formData.rememberMe}
+                onChange={handleChange}
+                disabled={isLoading}
+                className="h-4 w-4 rounded text-green-600 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 border-gray-300 disabled:cursor-not-allowed transition-colors" 
+              />
+              <span className="text-gray-700 group-hover:text-gray-900 transition-colors">
+                Kom ihåg mig
+              </span>
+            </label>
+            <button 
+              type="button" 
+              className="text-green-600 hover:text-green-700 font-medium hover:underline transition-colors"
+              onClick={() => {
+                // TODO: Implement forgot password
+                alert('Glömt lösenord-funktionen kommer snart!');
+              }}
             >
               Glömt lösenord?
             </button>
           </div>
 
-          <div className="flex space-x-3 pt-4">
+          {/* Action Buttons */}
+          <div className="flex gap-3 pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-colors"
+              disabled={isLoading}
+              className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Avbryt
             </button>
             <button
               type="submit"
               disabled={isLoading}
-              className={`flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-200 shadow-md ${
-                isLoading 
-                  ? 'opacity-60 cursor-not-allowed' 
-                  : 'hover:from-green-600 hover:to-green-700 transform hover:-translate-y-0.5'
-              }`}
+              className="flex-1 px-4 py-2.5 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-lg font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
             >
               {isLoading ? (
-                <span className="flex items-center justify-center">
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
                   <span>Loggar in...</span>
-                </span>
+                </>
               ) : (
                 'Logga in'
               )}
@@ -382,17 +278,16 @@ export default function LoginForm({
         </form>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-lg">
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-2xl">
           <p className="text-sm text-gray-600 text-center">
-            Har du inget konto?{' '}
-            <button 
+            Har inget konto?{' '}
+            <button
               onClick={() => {
                 onClose();
-                if (onSwitchToRegister) {
-                  setTimeout(() => onSwitchToRegister(), 100);
-                }
+                setTimeout(() => onSwitchToRegister?.(), 100);
               }}
-              className="text-green-600 hover:text-green-700 font-medium underline focus:outline-none focus:ring-2 focus:ring-green-500 rounded"
+              disabled={isLoading}
+              className="text-green-600 hover:text-green-700 font-semibold hover:underline disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Skapa ett här
             </button>

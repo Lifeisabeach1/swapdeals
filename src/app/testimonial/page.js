@@ -1,4 +1,3 @@
-//testimonial/page.js
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -6,7 +5,7 @@ import { MapPin, ArrowRight, X, Star } from 'lucide-react';
 
 // Individual Testimonial Card Component
 const TestimonialCard = ({ testimonial }) => {
-  const { name, location, text, avatar, bgColor, rating = 5 } = testimonial;
+  const { name, location, text, avatar, bgColor, rating = 5, verified = true } = testimonial;
     
   return (
     <div className={`bg-gradient-to-br ${bgColor} rounded-lg shadow-md p-4 border border-white/50 transform hover:-translate-y-1 transition-all duration-300`}>
@@ -23,12 +22,20 @@ const TestimonialCard = ({ testimonial }) => {
         </div>
       </div>
       <p className="text-gray-700 italic text-sm">{text}</p>
-      <div className="mt-3 flex items-center">
+      <div className="mt-3 flex items-center justify-between">
         <div className="flex text-yellow-500 text-xs">
-          {"★★★★★".split("").slice(0, rating).map((star, i) => (
-            <span key={i}>{star}</span>
+          {Array.from({ length: 5 }, (_, i) => (
+            <Star 
+              key={i}
+              className={`w-4 h-4 ${i < rating ? 'fill-current' : 'text-gray-300'}`}
+            />
           ))}
         </div>
+        {verified && (
+          <span className="text-xs text-gray-600 bg-white/50 px-2 py-1 rounded-full">
+            Verifierad
+          </span>
+        )}
       </div>
     </div>
   );
@@ -46,8 +53,8 @@ const TestimonialModal = ({ isOpen, onClose, onSubmit, containerRef }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const avatarOptions = [
-    '😊', '👩', '🧑', '👨‍💼', '👩‍💼','👍', '👎', '😢',
-    '👩‍🦳','🤖'
+    '😊', '👩', '🧑', '👨‍💼', '👩‍💼', '👍', '👎', '😢',
+    '👩‍🦰', '🧔', '👩‍🦳', '🤖'
   ];
 
   const bgColorOptions = [
@@ -82,7 +89,8 @@ const TestimonialModal = ({ isOpen, onClose, onSubmit, containerRef }) => {
     try {
       const testimonialData = {
         ...formData,
-        bgColor: bgColorOptions[Math.floor(Math.random() * bgColorOptions.length)]
+        bgColor: bgColorOptions[Math.floor(Math.random() * bgColorOptions.length)],
+        verified: true
       };
 
       const response = await fetch('/api/testimonials', {
@@ -165,14 +173,14 @@ const TestimonialModal = ({ isOpen, onClose, onSubmit, containerRef }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Välj din avatar
             </label>
-            <div className="grid grid-cols-10 gap-2">
+            <div className="grid grid-cols-6 gap-2">
               {avatarOptions.map((avatar) => (
                 <button
                   key={avatar}
                   type="button"
                   onClick={() => setFormData(prev => ({ ...prev, avatar }))}
                   disabled={isSubmitting}
-                  className={`w-8 h-8 text-lg rounded-full border-2 transition-all hover:scale-110 disabled:opacity-50 ${
+                  className={`w-10 h-10 text-lg rounded-full border-2 transition-all hover:scale-110 disabled:opacity-50 ${
                     formData.avatar === avatar 
                       ? 'border-blue-500 bg-blue-50 shadow-md' 
                       : 'border-gray-200 hover:border-gray-300'
@@ -256,6 +264,37 @@ export default function Testimonials() {
   const [error, setError] = useState(null);
   const containerRef = useRef(null);
 
+  // Default testimonials as fallback
+  const defaultTestimonials = [
+    {
+      name: "Emma L.",
+      location: "Stockholm",
+      text: "Jag bytte min gamla kamera mot ett professionellt stativ som jag verkligen behövde. Sparade pengar och hittade precis vad jag letade efter!",
+      avatar: "👩‍🦰",
+      bgColor: "from-pink-50 to-pink-100",
+      rating: 5,
+      verified: true
+    },
+    {
+      name: "Anders K.",
+      location: "Göteborg", 
+      text: "Fantastisk plattform! Jag har genomfört 7 byten hittills och varje ett har varit smidigt. Gemenskapen är vänlig och pålitlig.",
+      avatar: "🧔",
+      bgColor: "from-blue-50 to-blue-100",
+      rating: 5,
+      verified: true
+    },
+    {
+      name: "Sofia M.",
+      location: "Malmö",
+      text: "Som student har detta varit fantastiskt för att uppgradera min teknik och möbler utan att spendera pengar jag inte har.",
+      avatar: "👩",
+      bgColor: "from-purple-50 to-purple-100", 
+      rating: 5,
+      verified: true
+    }
+  ];
+
   // Fetch testimonials from API
   useEffect(() => {
     fetchTestimonials();
@@ -272,34 +311,9 @@ export default function Testimonials() {
       setTestimonials(data.testimonials);
     } catch (err) {
       console.error('Fel vid hämtning av omdömen:', err);
-      setError('Misslyckades att ladda omdömen');
-      // Fallback to default testimonials (only 3)
-      setTestimonials([
-        {
-          name: "Emma L.",
-          location: "Stockholm",
-          text: "Jag bytte min gamla kamera mot ett professionellt stativ som jag verkligen behövde. Sparade pengar och hittade precis vad jag letade efter!",
-          avatar: "👩‍🦰",
-          bgColor: "from-pink-50 to-pink-100",
-          rating: 5
-        },
-        {
-          name: "Anders K.",
-          location: "Göteborg", 
-          text: "Fantastisk plattform! Jag har genomfört 7 byten hittills och varje ett har varit smidigt. Gemenskapen är vänlig och pålitlig.",
-          avatar: "🧔",
-          bgColor: "from-blue-50 to-blue-100",
-          rating: 5
-        },
-        {
-          name: "Sofia M.",
-          location: "Malmö",
-          text: "Som student har detta varit fantastiskt för att uppgradera min teknik och möbler utan att spendera pengar jag inte har.",
-          avatar: "👩",
-          bgColor: "from-purple-50 to-purple-100", 
-          rating: 5
-        }
-      ]);
+      setError('Kunde inte ladda omdömen från servern');
+      // Fallback to default testimonials
+      setTestimonials(defaultTestimonials);
     } finally {
       setLoading(false);
     }
@@ -340,7 +354,7 @@ export default function Testimonials() {
             >
               Dela ditt omdöme
             </button>
-            <a href="/alltestimonials" className="inline-flex items-center text-yellow-500 hover:text-blue-700 font-medium text-sm transition-colors">
+            <a href="/alltestimonials" className="inline-flex items-center text-blue-600 hover:text-blue-700 font-medium text-sm transition-colors">
               Se alla omdömen
               <ArrowRight className="w-4 h-4 ml-1" />
             </a>

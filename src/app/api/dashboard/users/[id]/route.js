@@ -1,23 +1,83 @@
 // app/api/dashboard/users/[id]/route.js
 import { NextResponse } from 'next/server';
-import { knex } from '@/lib/db/index.js';
+import { createClient } from '@supabase/supabase-js';
+import { verifyToken } from '@/lib/auth/jwt';
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+// Helper to verify admin access
+async function verifyAdminAccess(request) {
+  const authHeader = request.headers.get('authorization');
+  
+  if (!authHeader?.startsWith('Bearer ')) {
+    return { error: 'Authorization required', status: 401 };
+  }
+  
+  const token = authHeader.substring(7);
+  const decoded = verifyToken(token);
+  
+  if (!decoded) {
+    return { error: 'Invalid or expired token', status: 401 };
+  }
+  
+  // Check if user is admin
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', decoded.id)
+    .single();
+  
+  if (error || !user) {
+    return { error: 'User not found', status: 404 };
+  }
+  
+  if (user.role !== 'admin') {
+    return { error: 'Admin access required', status: 403 };
+  }
+  
+  return { userId: decoded.id };
+}
 
 // GET handler to retrieve a specific user
 export async function GET(request, { params }) {
   try {
-    const userId = params.id;
+    const { id } = await params;
     
-    const user = await knex('users').where({ id: userId }).first();
-    
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    // Verify admin access
+    const authResult = await verifyAdminAccess(request);
+    if (authResult.error) {
+      return NextResponse.json(
+        { success: false, message: authResult.error },
+        { status: authResult.status }
+      );
     }
     
-    return NextResponse.json({ user }, { status: 200 });
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (error || !user) {
+      return NextResponse.json(
+        { success: false, message: 'User not found' },
+        { status: 404 }
+      );
+    }
+    
+    return NextResponse.json({ 
+      success: true, 
+      user 
+    });
+
   } catch (error) {
-    console.error(`Error fetching user ${params.id}:`, error);
+    console.error('Error fetching user:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch user' },
+      { success: false, message: 'Failed to fetch user' },
       { status: 500 }
     );
   }
@@ -26,41 +86,77 @@ export async function GET(request, { params }) {
 // PUT handler to update a specific user
 export async function PUT(request, { params }) {
   try {
-    const userId = params.id;
+    const { id } = await params;
+    
+    // Verify admin access
+    const authResult = await verifyAdminAccess(request);
+    if (authResult.error) {
+      return NextResponse.json(
+        { success: false, message: authResult.error },
+        { status: authResult.status }
+      );
+    }
+    
     const data = await request.json();
     
     // Check if user exists
-    const user = await knex('users').where({ id: userId }).first();
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (userError || !user) {
+      return NextResponse.json(
+        { success: false, message: 'User not found' },
+        { status: 404 }
+      );
     }
     
     // If updating email, check it's not already taken
     if (data.email && data.email !== user.email) {
-      const existingUser = await knex('users').where({ email: data.email }).first();
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', data.email)
+        .single();
+      
       if (existingUser) {
         return NextResponse.json(
-          { error: 'Email already exists' },
+          { success: false, message: 'Email already exists' },
           { status: 409 }
         );
       }
     }
     
     // Update user
-    await knex('users')
-      .where({ id: userId })
+    const { data: updatedUser, error: updateError } = await supabase
+      .from('users')
       .update({
         ...data,
-        updated_at: new Date()
-      });
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
     
-    const updatedUser = await knex('users').where({ id: userId }).first();
+    if (updateError) {
+      console.error('Error updating user:', updateError);
+      return NextResponse.json(
+        { success: false, message: 'Failed to update user' },
+        { status: 500 }
+      );
+    }
     
-    return NextResponse.json({ user: updatedUser }, { status: 200 });
+    return NextResponse.json({ 
+      success: true, 
+      user: updatedUser 
+    });
+
   } catch (error) {
-    console.error(`Error updating user ${params.id}:`, error);
+    console.error('Error updating user:', error);
     return NextResponse.json(
-      { error: 'Failed to update user' },
+      { success: false, message: 'Failed to update user' },
       { status: 500 }
     );
   }
@@ -69,25 +165,54 @@ export async function PUT(request, { params }) {
 // DELETE handler to remove a specific user
 export async function DELETE(request, { params }) {
   try {
-    const userId = params.id;
+    const { id } = await params;
+    
+    // Verify admin access
+    const authResult = await verifyAdminAccess(request);
+    if (authResult.error) {
+      return NextResponse.json(
+        { success: false, message: authResult.error },
+        { status: authResult.status }
+      );
+    }
     
     // Check if user exists
-    const user = await knex('users').where({ id: userId }).first();
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', id)
+      .single();
+    
+    if (userError || !user) {
+      return NextResponse.json(
+        { success: false, message: 'User not found' },
+        { status: 404 }
+      );
     }
     
     // Delete user
-    await knex('users').where({ id: userId }).del();
+    const { error: deleteError } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', id);
     
-    return NextResponse.json(
-      { message: 'User deleted successfully' },
-      { status: 200 }
-    );
+    if (deleteError) {
+      console.error('Error deleting user:', deleteError);
+      return NextResponse.json(
+        { success: false, message: 'Failed to delete user' },
+        { status: 500 }
+      );
+    }
+    
+    return NextResponse.json({
+      success: true,
+      message: 'User deleted successfully'
+    });
+
   } catch (error) {
-    console.error(`Error deleting user ${params.id}:`, error);
+    console.error('Error deleting user:', error);
     return NextResponse.json(
-      { error: 'Failed to delete user' },
+      { success: false, message: 'Failed to delete user' },
       { status: 500 }
     );
   }
