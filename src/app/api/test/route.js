@@ -1,0 +1,18 @@
+// app/api/test/route.js
+import { NextResponse } from 'next/server';
+
+export const dynamic = 'force-dynamic';
+
+export async function GET() {
+  return NextResponse.json({
+    status: 'API is working',
+    timestamp: new Date().toISOString(),
+    env: {
+      NODE_ENV: process.env.NODE_ENV,
+      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET' : 'MISSING',
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'SET' : 'MISSING',
+      SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SET' : 'MISSING',
+      JWT_SECRET: process.env.JWT_SECRET ? 'SET' : 'MISSING',
+    }
+  });
+}
