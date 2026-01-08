@@ -1,237 +1,414 @@
 // app/page.js
-'use client';
-
-import { useState } from 'react';
-import {
-  ArrowLeftRight, RefreshCw, Camera, Coffee, Shuffle, ArrowRight,
-} from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import React from 'react';
+import Hero from '@/components/Hero';
 import NewTradesCarousel from './newtradescarousel/page';
-import Hero from '@/components/Hero'
 import Testimonials from './testimonial/page';
-import Link from 'next/link';
+import Script from 'next/script';
 
-export default function TradeSmart() {
-  const router = useRouter();
-  const [searchParams, setSearchParams] = useState({
-    query: '',
-    location: 'Hela Sverige',
-    category: 'Alla Kategorier'
-  });
-
-  const handleSearch = (searchData) => {
-    setSearchParams(searchData);
-  };
-
-  const navigateToTradeForm = () => {
-    router.push('/createtradepage');
-  };
-
-  const navigateToGuide = () => {
-    router.push('/swapdeals-guide');
-  };
-
-  const navigateToSustainableTrading = () => {
-    router.push('/sustainable-trading');
-  };
-
-  const howItWorks = [
-    { 
-      title: "Ladda upp dina föremål",
-      description: "Ta foton och lista föremål du inte längre behöver",
-      icon: <Camera className="w-5 h-5 text-white" />,
-      bgColor: "from-green-400 to-green-500",
-      cardBg: "from-green-50 to-green-100",
-      borderColor: "border-green-200/50"
-    },
-    { 
-      title: "Bläddra & Matcha",
-      description: "Hitta användare med föremål du vill ha och föreslå byten",
-      icon: <Shuffle className="w-5 h-5 text-white" />,
-      bgColor: "from-yellow-400 to-yellow-500",
-      cardBg: "from-yellow-50 to-yellow-100",
-      borderColor: "border-yellow-200/50"
-    },
-    { 
-      title: "Kom överens & Byt",
-      description: "Slutför detaljer och genomför ditt byte",
-      icon: <RefreshCw className="w-5 h-5 text-white" />,
-      bgColor: "from-emerald-400 to-emerald-500",
-      cardBg: "from-emerald-50 to-emerald-100",
-      borderColor: "border-emerald-200/50"
+export const metadata = {
+  // Set base URL for all relative URLs
+  metadataBase: new URL('https://swapdeals.se'),
+  
+  // Title: 50-60 characters optimal, front-load primary keyword
+  title: 'SwapDeals | Second Hand | Hållbar Konsumtion',
+  
+  // Description: 150-160 characters, includes CTA and benefit-driven copy
+  description: 'Sveriges ledande bytesplattform ✓ Byt begagnade prylar gratis ✓ Hållbart & Miljövänligt ✓ Second Hand. Hitta bytesannonser nära dig!',
+  
+  // Authors and creator info
+  authors: [{ name: 'SwapDeals', url: 'https://swapdeals.se' }],
+  creator: 'SwapDeals',
+  publisher: 'SwapDeals',
+  
+  // Application name for better branding
+  applicationName: 'SwapDeals - Byteshandel Sverige',
+  
+  // Generator info
+  generator: 'Next.js',
+  
+  // Referrer policy
+  referrer: 'origin-when-cross-origin',
+  
+  // Format detection - disable automatic detection
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  
+  // Category for search engines
+  category: 'E-commerce & Trading',
+  
+  // Classification
+  classification: 'Online Trading Platform',
+  
+  // Enhanced Open Graph metadata
+  openGraph: {
+    type: 'website',
+    locale: 'sv_SE',
+    url: 'https://swapdeals.se',
+    siteName: 'SwapDeals',
+    title: 'SwapDeals - Byteshandel & Begagnade Prylar | Helt Gratis',
+    description: 'Byt begagnade prylar gratis på Sveriges största bytesplattform. Hållbart, miljövänligt och 100% kostnadsfritt. Hitta tusentals bytesannonser i hela Sverige!',
+    images: [
+      {
+        url: '/bytaprylar.webp',
+        width: 1200,
+        height: 630,
+        alt: 'SwapDeals - Sveriges bytesplattform för hållbar handel',
+        type: 'image/webp'
+      }
+    ],
+  },
+  
+  // Enhanced Twitter/X metadata
+  twitter: {
+    card: 'summary_large_image',
+    site: '@SwapDealsSE',
+    creator: '@SwapDealsSE',
+    title: 'SwapDeals - Byt Begagnade Prylar Gratis i Sverige',
+    description: 'Sveriges ledande bytesplattform för hållbar konsumtion. Byt kläder, elektronik, möbler och mer - helt gratis! Gå med idag.',
+    images: {
+      url: '/bytaprylar.webp',
+      alt: 'SwapDeals - Byteshandel Sverige'
     }
-  ];
+  },
+  
+  // Canonical URL - critical for avoiding duplicate content
+  alternates: {
+    canonical: 'https://swapdeals.se',
+    languages: {
+      'sv-SE': 'https://swapdeals.se',
+    },
+  },
+  
+  // Robots configuration - explicit control over indexing
+  robots: {
+    index: true,
+    follow: true,
+    nocache: false,
+    googleBot: {
+      index: true,
+      follow: true,
+      noimageindex: false,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  
+  // Additional meta tags
+  other: {
+    // Geographic information - Sweden-wide
+    'geo.region': 'SE',
+    'geo.placename': 'Sverige',
+    
+    // Language and content
+    'language': 'sv-SE',
+    'content-language': 'sv-SE',
+    
+    // Business information
+    'contact': 'support@swapdeals.se',
+    'rating': 'General',
+    
+    // Mobile optimization
+    'mobile-web-app-capable': 'yes',
+    'apple-mobile-web-app-capable': 'yes',
+    'apple-mobile-web-app-status-bar-style': 'default',
+    'apple-mobile-web-app-title': 'SwapDeals',
+    
+    // Theme color - brand green
+    'theme-color': '#10b981',
+    'msapplication-TileColor': '#10b981',
+    'msapplication-navbutton-color': '#10b981',
+    
+    // App-specific tags
+    'application-name': 'SwapDeals',
+    'HandheldFriendly': 'true',
+    'MobileOptimized': '320',
+    
+    // Copyright
+    'copyright': 'SwapDeals',
+    'author': 'SwapDeals',
+    
+    // Revisit after (for crawlers)
+    'revisit-after': '7 days',
+    
+    // Distribution
+    'distribution': 'global',
+    
+    // Audience
+    'audience': 'all',
+    
+    // Page topic
+    'page-topic': 'Trading, E-commerce, Sustainability',
+    'page-type': 'Product catalog',
+  }
+};
 
+const HomePage = () => {
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-green-50/30 via-gray-50 to-yellow-50/30">
-      {/* WebSite structured data for search functionality */}
-      <script
+    <>
+      {/* CONSOLIDATED STRUCTURED DATA SCRIPT */}
+      <Script
+        id="consolidated-structured-data"
         type="application/ld+json"
+        strategy="beforeInteractive"
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
             "@context": "https://schema.org",
-            "@type": "WebSite",
-            "name": "SwapDeals",
-            "url": "https://swapdeals.se",
-            "description": "Sveriges ledande plattform för hållbar byteshandel",
-            "potentialAction": {
-              "@type": "SearchAction",
-              "target": {
-                "@type": "EntryPoint",
-                "urlTemplate": "https://swapdeals.se/search?q={search_term_string}"
+            "@graph": [
+              // Website Schema
+              {
+                "@type": "WebSite",
+                "@id": "https://swapdeals.se#website",
+                "url": "https://swapdeals.se",
+                "name": "SwapDeals",
+                "alternateName": "SwapDeals",
+                "description": "Sveriges ledande plattform för hållbar byteshandel - byt begagnade prylar gratis",
+                "publisher": {
+                  "@id": "https://swapdeals.se#organization"
+                },
+                "inLanguage": "sv-SE",
+                "potentialAction": {
+                  "@type": "SearchAction",
+                  "target": {
+                    "@type": "EntryPoint",
+                    "urlTemplate": "https://swapdeals.se/search?q={search_term_string}"
+                  },
+                  "query-input": "required name=search_term_string"
+                }
               },
-              "query-input": "required name=search_term_string"
-            }
+              
+              // Organization Schema
+              {
+                "@type": "Organization",
+                "@id": "https://swapdeals.se#organization",
+                "name": "SwapDeals",
+                "alternateName": "SwapDeals",
+                "url": "https://swapdeals.se",
+                "logo": {
+                  "@type": "ImageObject",
+                  "url": "https://swapdeals.se/bytaprylar.webp",
+                  "width": 512,
+                  "height": 512
+                },
+                "description": "Sveriges ledande bytesplattform för hållbar konsumtion och cirkulär ekonomi",
+                "email": "support@swapdeals.se",
+                "foundingDate": "2024",
+                "slogan": "Byt istället för att köpa",
+                "contactPoint": {
+                  "@type": "ContactPoint",
+                  "contactType": "customer support",
+                  "email": "support@swapdeals.se",
+                  "areaServed": "SE",
+                  "availableLanguage": ["Swedish"]
+                },
+                "areaServed": {
+                  "@type": "Country",
+                  "name": "Sverige"
+                },
+                "sameAs": [
+                  "https://www.facebook.com/swapdeals",
+                  "https://www.instagram.com/swapdeals.se/",
+                  "https://twitter.com/SwapDealsSE",
+                  "https://www.tiktok.com/@swapdeals"
+                ]
+              },
+              
+              // WebPage Schema
+              {
+                "@type": "WebPage",
+                "@id": "https://swapdeals.se#webpage",
+                "url": "https://swapdeals.se",
+                "name": "SwapDeals - Byteshandel & Begagnade Prylar",
+                "description": "Byt begagnade prylar gratis på Sveriges största bytesplattform. Hållbart, miljövänligt och kostnadsfritt.",
+                "isPartOf": {
+                  "@id": "https://swapdeals.se#website"
+                },
+                "about": {
+                  "@id": "https://swapdeals.se#organization"
+                },
+                "inLanguage": "sv-SE",
+                "primaryImageOfPage": {
+                  "@type": "ImageObject",
+                  "url": "https://swapdeals.se/bytaprylar.webp"
+                }
+              },
+              
+              // Breadcrumb Schema
+              {
+                "@type": "BreadcrumbList",
+                "@id": "https://swapdeals.se#breadcrumb",
+                "itemListElement": [
+                  {
+                    "@type": "ListItem",
+                    "position": 1,
+                    "name": "Hem",
+                    "item": "https://swapdeals.se"
+                  }
+                ]
+              },
+              
+              // FAQ Schema
+              {
+                "@type": "FAQPage",
+                "@id": "https://swapdeals.se#faq",
+                "mainEntity": [
+                  {
+                    "@type": "Question",
+                    "name": "Hur fungerar byteshandel på SwapDeals?",
+                    "acceptedAnswer": {
+                      "@type": "Answer",
+                      "text": "På SwapDeals kan du lägga upp bytesannonser helt gratis. Du väljer vad du vill byta bort och vad du söker i utbyte. När någon är intresserad kontaktar ni varandra direkt genom plattformen för att komma överens om bytesdetaljer. Ingen betalning behövs - det är bara att byta prylar!"
+                    }
+                  },
+                  {
+                    "@type": "Question",
+                    "name": "Kostar det något att använda SwapDeals?",
+                    "acceptedAnswer": {
+                      "@type": "Answer",
+                      "text": "Nej, SwapDeals är helt gratis att använda! Du kan lägga upp obegränsat med bytesannonser, bläddra bland alla annonser och kontakta andra användare utan någon kostnad. Vår mission är att göra hållbar byteshandel tillgänglig för alla."
+                    }
+                  },
+                  {
+                    "@type": "Question",
+                    "name": "Vilka typer av prylar kan man byta på SwapDeals?",
+                    "acceptedAnswer": {
+                      "@type": "Answer",
+                      "text": "Du kan byta nästan vad som helst på SwapDeals! Populära kategorier inkluderar kläder och mode, elektronik och prylar, böcker och media, sport och fritid, hem och inredning, leksaker och barnprylar. Så länge det är lagligt och i gott skick kan du byta det!"
+                    }
+                  },
+                  {
+                    "@type": "Question",
+                    "name": "Hur säkert är det att byta prylar med okända personer?",
+                    "acceptedAnswer": {
+                      "@type": "Answer",
+                      "text": "Vi rekommenderar alltid att träffas på offentliga platser vid byte. Kommunicera tydligt om föremålets skick innan ni träffas. Du kan också kolla användarens omdömen och historik på plattformen. Vi har säkerhetsriktlinjer och support-team som hjälper till om något skulle uppstå."
+                    }
+                  },
+                  {
+                    "@type": "Question",
+                    "name": "Måste man byta mot något med samma värde?",
+                    "acceptedAnswer": {
+                      "@type": "Answer",
+                      "text": "Nej, du och den andra parten bestämmer helt själva vad som är ett rättvist byte. Många väljer att byta prylar med liknande värde, men andra kanske byter flera mindre saker mot en större. Det viktiga är att båda parter är nöjda med bytet!"
+                    }
+                  },
+                  {
+                    "@type": "Question",
+                    "name": "Kan jag byta prylar i hela Sverige?",
+                    "acceptedAnswer": {
+                      "@type": "Answer",
+                      "text": "Ja! SwapDeals fungerar i hela Sverige. Du kan välja att söka efter bytesannonser nära dig för enkla möten, eller kontakta personer längre bort om du vill skicka prylar med posten. Många användare är öppna för både fysiska möten och postbyte."
+                    }
+                  },
+                  {
+                    "@type": "Question",
+                    "name": "Varför ska jag välja byteshandel istället för att köpa nytt?",
+                    "acceptedAnswer": {
+                      "@type": "Answer",
+                      "text": "Byteshandel är både ekonomiskt smart och miljövänligt! Du sparar pengar genom att inte köpa nytt, minskar konsumtion och avfall, ger saker nytt liv, och bidrar till cirkulär ekonomi. Plus att du kan hitta unika prylar och träffa nya människor i din omgivning. Det är en win-win för både plånboken och planeten!"
+                    }
+                  }
+                ]
+              },
+              
+              // CollectionPage for listings
+              {
+                "@type": "CollectionPage",
+                "@id": "https://swapdeals.se#collection",
+                "name": "Bytesannonser Sverige",
+                "description": "Bläddra bland tusentals bytesannonser i hela Sverige",
+                "url": "https://swapdeals.se",
+                "isPartOf": {
+                  "@id": "https://swapdeals.se#website"
+                }
+              },
+              
+              // Service Schema
+              {
+                "@type": "Service",
+                "@id": "https://swapdeals.se#service",
+                "serviceType": "Trading Platform",
+                "name": "Byteshandel Plattform",
+                "description": "Gratis plattform för byteshandel av begagnade prylar i Sverige",
+                "provider": {
+                  "@id": "https://swapdeals.se#organization"
+                },
+                "areaServed": {
+                  "@type": "Country",
+                  "name": "Sverige"
+                },
+                "hasOfferCatalog": {
+                  "@type": "OfferCatalog",
+                  "name": "Bytesannonser",
+                  "itemListElement": [
+                    {
+                      "@type": "OfferCategory",
+                      "name": "Elektronik & Prylar",
+                      "description": "Byt mobiler, datorer, surfplattor och elektronik"
+                    },
+                    {
+                      "@type": "OfferCategory",
+                      "name": "Kläder & Mode",
+                      "description": "Byt kläder, skor och accessoarer"
+                    },
+                    {
+                      "@type": "OfferCategory",
+                      "name": "Hem & Inredning",
+                      "description": "Byt möbler, lampor och heminredning"
+                    },
+                    {
+                      "@type": "OfferCategory",
+                      "name": "Sport & Fritid",
+                      "description": "Byt sportutrustning och fritidsprylar"
+                    },
+                    {
+                      "@type": "OfferCategory",
+                      "name": "Böcker & Media",
+                      "description": "Byt böcker, filmer och musik"
+                    }
+                  ]
+                },
+                "termsOfService": "https://swapdeals.se/terms",
+                "audience": {
+                  "@type": "Audience",
+                  "audienceType": "Everyone interested in sustainable trading"
+                }
+              }
+            ]
           })
         }}
       />
-      
-      <div className="max-w-6xl mx-auto w-full px-3 sm:px-4 flex-1 py-3 sm:py-6">
-        <div className="bg-white/80 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-2xl border border-green-200/30 p-3 sm:p-6 overflow-hidden relative">
+
+      {/* Main content */}
+      <main className="flex flex-col min-h-screen bg-gradient-to-br from-green-50/30 via-gray-50 to-yellow-50/30">
+        {/* Hero Section - Contains main landing content */}
+        <Hero />
+
+        {/* Additional Sections Container */}
+        <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 pb-8 sm:pb-12 lg:pb-16">
           
-          {/* Premium floating orbs with green/yellow theme - smaller on mobile */}
-          <div className="absolute -top-12 sm:-top-24 -right-12 sm:-right-24 w-24 sm:w-48 h-24 sm:h-48 bg-gradient-to-br from-green-200/20 to-yellow-200/20 rounded-full blur-2xl sm:blur-3xl"></div>
-          <div className="absolute -bottom-12 sm:-bottom-24 -left-12 sm:-left-24 w-24 sm:w-48 h-24 sm:h-48 bg-gradient-to-br from-yellow-200/20 to-green-200/20 rounded-full blur-2xl sm:blur-3xl"></div>
-          
-          {/* Combined Platform Data and New Trades section */}
-          <section className="bg-gradient-to-br from-green-50/50 via-white/50 to-yellow-50/50 py-4 sm:py-8 rounded-lg sm:rounded-xl shadow-lg border border-green-200/30 relative overflow-hidden mb-4 sm:mb-6">
-            <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-white/10 to-transparent pointer-events-none z-0"></div>
-            
-            {/* Platform Data at the top */}
-            <div className="mb-6 sm:mb-8 relative z-10">
-              <Hero />
-            </div>
-            
-            {/* Divider */}
-            <div className="w-full h-px bg-gradient-to-r from-transparent via-green-200/50 to-transparent mb-6 sm:mb-8"></div>
-            
-            {/* New Trades Carousel below */}
-            <div className="relative z-10">
-              <NewTradesCarousel />
-            </div>
+          {/* New Trades Carousel Section */}
+          <section 
+            className="mb-8 sm:mb-12" 
+            aria-label="Senaste bytesannonser"
+          >
+            <NewTradesCarousel />
           </section>
 
-          {/* Enhanced How It Works section - Mobile optimized */}
-          <section className="py-3 sm:py-4 mb-4 sm:mb-6">
-            <div className="bg-gradient-to-br from-green-50/50 via-white/50 to-yellow-50/50 rounded-lg sm:rounded-xl shadow-lg p-3 sm:p-4 border border-green-200/30 relative overflow-hidden">
-              {/* Subtle background pattern - smaller on mobile */}
-              <div className="absolute top-0 right-0 w-16 sm:w-32 h-16 sm:h-32 bg-gradient-to-br from-green-100/30 to-yellow-100/30 rounded-full blur-xl sm:blur-2xl"></div>
-              
-              <div className="flex flex-col space-y-3 sm:space-y-0 sm:flex-row sm:justify-between sm:items-center mb-4 sm:mb-4 relative z-10">
-                <h2 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-gray-800 via-green-700 to-gray-800 bg-clip-text text-transparent drop-shadow-sm">
-                  Så fungerar SwapDeals
-                </h2>
-                <button 
-                  onClick={navigateToGuide}
-                  className="inline-flex items-center text-green-600 hover:text-green-700 font-medium text-xs sm:text-sm transition-all duration-200 hover:bg-green-50 px-2 sm:px-3 py-1.5 sm:py-2 rounded-md sm:rounded-lg border border-green-200/50 hover:border-green-300 hover:shadow-md self-start"
-                >
-                  Se detaljerad guide
-                  <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 ml-1" />
-                </button>
-              </div>
-              
-              {/* Mobile: Stack vertically, Desktop: 3 columns */}
-              <div className="flex flex-col space-y-3 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-4 relative z-10">
-                {howItWorks.map((step, index) => (
-                  <div key={index} className={`bg-gradient-to-br ${step.cardBg} rounded-lg shadow-md p-3 sm:p-4 border ${step.borderColor} transform hover:-translate-y-1 transition-all duration-300 hover:shadow-lg relative overflow-hidden`}>
-                    {/* Card accent */}
-                    <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${step.bgColor}`}></div>
-                    
-                    <div className="flex items-start space-x-3 sm:block sm:space-x-0">
-                      <div className={`w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br ${step.bgColor} rounded-lg sm:rounded-xl mb-0 sm:mb-3 flex items-center justify-center shadow-lg flex-shrink-0`}>
-                        {step.icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-sm sm:text-base font-bold text-gray-800 mb-1 sm:mb-2">{step.title}</h3>
-                        <p className="text-gray-700 text-xs sm:text-sm mb-2 sm:mb-3 leading-relaxed">{step.description}</p>
-                        <div className="flex items-center">
-                          <div className={`w-6 h-6 sm:w-7 sm:h-7 bg-gradient-to-br ${step.bgColor} rounded-full flex items-center justify-center text-white font-bold text-xs sm:text-sm shadow-md`}>
-                            {index + 1}
-                          </div>
-                          <div className="h-0.5 sm:h-1 bg-gradient-to-r from-green-200 to-yellow-200 flex-grow ml-2 rounded-full"></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* Enhanced Sustainable Trading section - Mobile optimized */}
-          <section className="py-3 sm:py-4 mb-4 sm:mb-6">
-            <div className="bg-white rounded-lg sm:rounded-xl shadow-lg overflow-hidden transform hover:-translate-y-1 transition-all duration-300 border border-green-200/30 relative">
-              {/* Top accent strip */}
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-400 via-yellow-400 to-green-500"></div>
-              
-              {/* Mobile: Stack vertically, Desktop: Side by side */}
-              <div className="flex flex-col md:flex-row-reverse">
-                <div className="w-full md:w-1/2 bg-gradient-to-br from-green-50/50 to-yellow-50/50 flex items-center justify-center p-3 sm:p-4 relative order-2 md:order-1">
-                  <div className="relative w-full h-32 sm:h-48">
-                    <div className="absolute inset-0 bg-gradient-to-r from-green-100/70 to-yellow-100/70 opacity-70 rounded-lg"></div>
-                    <div className="absolute inset-2 sm:inset-4 border-2 border-green-400/40 border-dashed rounded-lg flex items-center justify-center transform hover:scale-105 transition-transform duration-300">
-                      <div className="w-8 h-8 sm:w-12 sm:h-12 bg-gradient-to-br from-green-400 to-yellow-400 rounded-full flex items-center justify-center shadow-lg">
-                        <Shuffle className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
-                      </div>
-                    </div>
-                    {/* Floating elements */}
-                    <div className="absolute top-1 right-1 sm:top-2 sm:right-2 w-3 h-3 sm:w-4 sm:h-4 bg-gradient-to-br from-yellow-300 to-yellow-400 rounded-full opacity-60"></div>
-                    <div className="absolute bottom-1 left-1 sm:bottom-2 sm:left-2 w-2 h-2 sm:w-3 sm:h-3 bg-gradient-to-br from-green-300 to-green-400 rounded-full opacity-60"></div>
-                  </div>
-                </div>
-                <div className="p-4 sm:p-6 w-full md:w-1/2 flex flex-col justify-center relative order-1 md:order-2">
-                  <div className="relative z-10">
-                    <div className="mb-2">
-                      <span className="inline-block bg-gradient-to-r from-green-100 to-yellow-100 text-green-800 text-xs font-medium px-2 sm:px-3 py-1 rounded-full mb-2 border border-green-200/50">
-                        Miljövänligt
-                      </span>
-                    </div>
-                    <h2 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-gray-800 via-green-700 to-gray-800 bg-clip-text text-transparent mb-2 sm:mb-3 drop-shadow-sm">
-                      Hållbar Handel
-                    </h2>
-                    <p className="text-gray-700 mb-3 sm:mb-4 text-sm leading-relaxed">
-                      Byt föremål du inte längre behöver mot saker du faktiskt vill ha. Bättre för din plånbok och planeten.
-                    </p>
-                    <div className="flex flex-col space-y-2 sm:space-y-3 mb-4 sm:mb-6">
-                      <div className="flex items-start">
-                        <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-br from-green-400 to-green-500 flex items-center justify-center text-white mr-2 sm:mr-3 text-xs shadow-sm flex-shrink-0 mt-0.5">✓</div>
-                        <span className="text-gray-700 text-xs sm:text-sm leading-relaxed">Minska avfall genom att förlänga produkters livscykler</span>
-                      </div>
-                      <div className="flex items-start">
-                        <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-500 flex items-center justify-center text-white mr-2 sm:mr-3 text-xs shadow-sm flex-shrink-0 mt-0.5">✓</div>
-                        <span className="text-gray-700 text-xs sm:text-sm leading-relaxed">Spara pengar genom direkta byten</span>
-                      </div>
-                      <div className="flex items-start">
-                        <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center text-white mr-2 sm:mr-3 text-xs shadow-sm flex-shrink-0 mt-0.5">✓</div>
-                        <span className="text-gray-700 text-xs sm:text-sm leading-relaxed">Bygg din community över hela Sverige</span>
-                      </div>
-                    </div>
-                    <div className="flex flex-col space-y-2 sm:space-y-0 sm:flex-row sm:gap-3">
-                      <Link href="/tradeform" className="flex-1">
-                        <button className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white py-2.5 sm:py-3 px-4 sm:px-5 rounded-lg transition-all duration-300 font-medium shadow-lg hover:shadow-xl flex items-center justify-center transform hover:-translate-y-1 text-sm">
-                          <ArrowLeftRight className="w-4 h-4 mr-2" />
-                          Swap
-                        </button>
-                      </Link>
-                      <button 
-                        onClick={navigateToSustainableTrading}
-                        className="w-full sm:w-auto bg-white border border-green-300 hover:border-green-500 text-gray-800 hover:text-green-600 py-2.5 sm:py-3 px-4 sm:px-5 rounded-lg transition-all duration-300 font-medium flex items-center justify-center shadow-md hover:shadow-lg transform hover:-translate-y-1 text-sm hover:bg-green-50/50"
-                      >
-                        <Coffee className="w-4 h-4 mr-2" />
-                        Läs Mer
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <div className="mb-4 sm:mb-6">
+          {/* Testimonials Section */}
+          <section 
+            className="mb-8 sm:mb-12" 
+            aria-label="Användarrecensioner"
+          >
             <Testimonials />
-          </div>
+          </section>
         </div>
-      </div>
-    </div>
+      </main>
+    </>
   );
-}
+};
+
+export default HomePage;

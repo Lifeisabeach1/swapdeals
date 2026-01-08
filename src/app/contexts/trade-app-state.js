@@ -117,43 +117,6 @@ export function TradeAppProvider({ children }) {
     }
   };
 
-  // Get seller profile
-  const getSellerProfile = async (userId) => {
-    try {
-      const response = await fetch(`/api/users/${userId}/profile`);
-      
-      if (!response.ok) {
-        throw new Error(response.status === 404 ? 'Seller profile not found' : `HTTP ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return data.success ? data.data : null;
-    } catch (err) {
-      console.error('Error fetching seller profile:', err);
-      throw err;
-    }
-  };
-
-  // Get seller's other listings
-  const getSellerOtherListings = async (userId, excludeListingId = null) => {
-    try {
-      const params = new URLSearchParams({ userId });
-      if (excludeListingId) params.append('exclude', excludeListingId);
-      
-      const response = await fetch(`/api/trades/seller?${params.toString()}`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return data.success ? (data.data.listings || []) : [];
-    } catch (err) {
-      console.error('Error fetching seller listings:', err);
-      throw err;
-    }
-  };
-
   // Remove listing
   const removeListing = async (id) => {
     if (!isAuthenticated || !token) {
@@ -286,8 +249,6 @@ export function TradeAppProvider({ children }) {
     getListingBySlug,
     searchListings,
     refreshListings: fetchListings,
-    getSellerProfile,
-    getSellerOtherListings,
     contactSeller,
     isAuthenticated,
     currentUser: user,

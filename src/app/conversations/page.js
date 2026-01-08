@@ -1,7 +1,7 @@
 // /app/conversations/page.js
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { MessageCircle, Clock, User, Package, MapPin, Search, Filter, X, Menu } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
@@ -23,10 +23,16 @@ export default function ConversationsPage() {
   
   const router = useRouter();
   const { user, isAuthenticated, token, isLoading: authLoading } = useAuth();
+  
+  // Track last token used to prevent duplicate requests with old tokens
+  const lastTokenRef = useRef(null);
 
-  // FIXED: Removed api from dependencies, using fetch directly
   const loadConversations = useCallback(async () => {
-    if (!token) return;
+    // Skip if no token OR if it's the same token we just used
+    if (!token || token === lastTokenRef.current) return;
+    
+    // Mark this token as used
+    lastTokenRef.current = token;
     
     try {
       setLoading(true);
@@ -69,6 +75,8 @@ export default function ConversationsPage() {
   const handleAuthSuccess = () => {
     setShowLoginForm(false);
     setShowRegisterForm(false);
+    // Reset ref so new token will load
+    lastTokenRef.current = null;
   };
 
   const formatTime = (timestamp) => {
@@ -100,7 +108,6 @@ export default function ConversationsPage() {
     return searchMatch;
   });
 
-  // FIXED: Using fetch directly instead of api
   const openConversation = async (conversation) => {
     if (conversation.unread_count > 0) {
       setConversations(prev => 
@@ -136,6 +143,24 @@ export default function ConversationsPage() {
     completed: 'Slutförd',
     cancelled: 'Avbruten',
     pending: 'Väntande'
+  };
+
+  const getStatColorClasses = (color) => {
+    const colorMap = {
+      blue: {
+        text: 'bg-gradient-to-r from-blue-600 to-blue-500 bg-clip-text text-transparent',
+        bg: 'bg-gradient-to-br from-blue-100 to-blue-200'
+      },
+      green: {
+        text: 'bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent',
+        bg: 'bg-gradient-to-br from-green-100 to-green-200'
+      },
+      red: {
+        text: 'bg-gradient-to-r from-red-600 to-red-500 bg-clip-text text-transparent',
+        bg: 'bg-gradient-to-br from-red-100 to-red-200'
+      }
+    };
+    return colorMap[color] || colorMap.blue;
   };
 
   const stats = [
@@ -183,7 +208,7 @@ export default function ConversationsPage() {
         <div className="mb-6">
           <div className="flex items-center mb-4">
             <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-green-600 rounded-xl shadow-lg flex items-center justify-center mr-4">
-              <Image src="/Swapdealsemoji.png" alt="Logo" width={20} height={20} />
+              <Image src="/Swapdealsemoji.webp" alt="Logo" width={20} height={20} />
             </div>
             <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-green-700 bg-clip-text text-transparent">
@@ -248,19 +273,22 @@ export default function ConversationsPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-          {stats.map((stat, i) => (
-            <div key={i} className="bg-white/95 backdrop-blur-lg rounded-2xl shadow-lg border border-green-200/50 p-6">
-              <div className="flex items-center justify-between mb-2">
-                <div className={`text-3xl font-bold bg-gradient-to-r from-${stat.color}-600 to-${stat.color}-500 bg-clip-text text-transparent`}>
-                  {stat.value}
+          {stats.map((stat, i) => {
+            const colorClasses = getStatColorClasses(stat.color);
+            return (
+              <div key={i} className="bg-white/95 backdrop-blur-lg rounded-2xl shadow-lg border border-green-200/50 p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <div className={`text-3xl font-bold ${colorClasses.text}`}>
+                    {stat.value}
+                  </div>
+                  <div className={`w-10 h-10 ${colorClasses.bg} rounded-xl flex items-center justify-center`}>
+                    <span className="text-xl">{stat.emoji}</span>
+                  </div>
                 </div>
-                <div className={`w-10 h-10 bg-gradient-to-br from-${stat.color}-100 to-${stat.color}-200 rounded-xl flex items-center justify-center`}>
-                  <span className="text-xl">{stat.emoji}</span>
-                </div>
+                <div className="text-sm text-gray-600 font-medium">{stat.label}</div>
               </div>
-              <div className="text-sm text-gray-600 font-medium">{stat.label}</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Conversations List */}
@@ -407,7 +435,7 @@ const LoadingScreen = ({ message }) => (
       <div className="relative w-32 h-32 mx-auto">
         <div className="animate-spin rounded-full h-32 w-32 border-4 border-green-200 border-t-green-600"></div>
         <div className="absolute inset-0 flex items-center justify-center">
-          <Image src="/Swapdealsemoji.png" alt="Logo" width={24} height={24} className="opacity-70" />
+          <Image src="/Swapdealsemoji.webp" alt="Logo" width={24} height={24} className="opacity-70" />
         </div>
       </div>
       <p className="mt-6 text-gray-600 font-medium">{message}</p>

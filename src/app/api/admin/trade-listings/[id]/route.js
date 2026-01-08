@@ -1,12 +1,8 @@
-// ============================================================================
-// FILE 2: app/api/admin/trade-listings/[id]/route.js
-// Single trade listing operations (WITH ADMIN AUTH)
-// ============================================================================
+// app/api/admin/trade-listings/[id]/route.js
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { verifyToken } from '@/lib/auth/jwt';
 
-// Helper function to verify admin
 async function verifyAdmin(request) {
   const authHeader = request.headers.get('authorization');
   
@@ -21,7 +17,6 @@ async function verifyAdmin(request) {
     return { error: 'Invalid or expired token', status: 401 };
   }
 
-  // Check if user has admin role
   if (decoded.role !== 'admin') {
     return { error: 'Admin access required', status: 403 };
   }
@@ -29,10 +24,98 @@ async function verifyAdmin(request) {
   return { user: decoded };
 }
 
+// DELETE - Delete listing (REQUIRES ADMIN AUTH)
+export async function DELETE(request, { params }) {
+  const authCheck = await verifyAdmin(request);
+  if (authCheck.error) {
+    return NextResponse.json({ 
+      success: false, 
+      error: authCheck.error 
+    }, { status: authCheck.status });
+  }
+
+  try {
+    // ✅ CRITICAL FIX: Await params in Next.js 15
+    const { id } = await params;
+    
+    if (!id || isNaN(parseInt(id))) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'Invalid listing ID' 
+      }, { status: 400 });
+    }
+
+    const listingId = parseInt(id);
+
+    // Check if listing exists
+    const { data: existingListing, error: fetchError } = await supabase
+      .from('trade_listings')
+      .select('id, user_id, title')
+      .eq('id', listingId)
+      .single();
+
+    if (fetchError) {
+      if (fetchError.code === 'PGRST116') {
+        return NextResponse.json({ 
+          success: false,
+          error: 'Trade listing not found' 
+        }, { status: 404 });
+      }
+      throw fetchError;
+    }
+
+    // Delete related data first
+    await Promise.allSettled([
+      supabase.from('trade_items').delete().eq('listing_id', listingId),
+      supabase.from('images').delete().eq('listing_id', listingId),
+      supabase.from('trade_listing_views').delete().eq('listing_id', listingId)
+    ]);
+
+    // Delete the listing
+    const { error: deleteError } = await supabase
+      .from('trade_listings')
+      .delete()
+      .eq('id', listingId);
+
+    if (deleteError) throw deleteError;
+
+    // Log admin action (optional - won't fail if table doesn't exist)
+    try {
+      await supabase.from('admin_actions').insert({
+        admin_id: authCheck.user.id,
+        action_type: 'delete',
+        target_type: 'trade_listing',
+        target_id: listingId,
+        details: JSON.stringify({
+          title: existingListing.title,
+          deleted_by_admin: true
+        }),
+        created_at: new Date().toISOString()
+      });
+    } catch (logError) {
+      console.warn('Could not log admin action:', logError);
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Trade listing deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Delete listing error:', error);
+    return NextResponse.json({
+      success: false,
+      error: 'Failed to delete trade listing'
+    }, { status: 500 });
+  }
+}
+
 // GET - Get single listing (public - no auth needed)
 export async function GET(request, { params }) {
   try {
-    const { id } = params;
+    // ✅ CRITICAL FIX: Await params in Next.js 15
+    const { id } = await params;
+    
     if (!id || isNaN(parseInt(id))) {
       return NextResponse.json({ 
         success: false,
@@ -115,7 +198,6 @@ export async function GET(request, { params }) {
 
 // PUT - Update listing (REQUIRES ADMIN AUTH)
 export async function PUT(request, { params }) {
-  // Verify admin access
   const authCheck = await verifyAdmin(request);
   if (authCheck.error) {
     return NextResponse.json({ 
@@ -125,7 +207,9 @@ export async function PUT(request, { params }) {
   }
 
   try {
-    const { id } = params;
+    // ✅ CRITICAL FIX: Await params in Next.js 15
+    const { id } = await params;
+    
     if (!id || isNaN(parseInt(id))) {
       return NextResponse.json({ 
         success: false,
@@ -209,88 +293,6 @@ export async function PUT(request, { params }) {
     return NextResponse.json({
       success: false,
       error: 'Failed to update trade listing'
-    }, { status: 500 });
-  }
-}
-
-// DELETE - Delete listing (REQUIRES ADMIN AUTH)
-export async function DELETE(request, { params }) {
-  // Verify admin access
-  const authCheck = await verifyAdmin(request);
-  if (authCheck.error) {
-    return NextResponse.json({ 
-      success: false, 
-      error: authCheck.error 
-    }, { status: authCheck.status });
-  }
-
-  try {
-    const { id } = params;
-    if (!id || isNaN(parseInt(id))) {
-      return NextResponse.json({ 
-        success: false,
-        error: 'Invalid listing ID' 
-      }, { status: 400 });
-    }
-
-    const listingId = parseInt(id);
-
-    const { data: existingListing, error: fetchError } = await supabase
-      .from('trade_listings')
-      .select('id, user_id, title')
-      .eq('id', listingId)
-      .single();
-
-    if (fetchError) {
-      if (fetchError.code === 'PGRST116') {
-        return NextResponse.json({ 
-          success: false,
-          error: 'Trade listing not found' 
-        }, { status: 404 });
-      }
-      throw fetchError;
-    }
-
-    await Promise.allSettled([
-      supabase.from('trade_items').delete().eq('listing_id', listingId),
-      supabase.from('images').delete().eq('listing_id', listingId),
-      supabase.from('trade_listing_views').delete().eq('listing_id', listingId)
-    ]);
-
-    const { error: deleteError } = await supabase
-      .from('trade_listings')
-      .delete()
-      .eq('id', listingId);
-
-    if (deleteError) throw deleteError;
-
-    // Log admin action
-    try {
-      await supabase.from('admin_actions').insert({
-        admin_id: authCheck.user.id,
-        action_type: 'delete',
-        target_type: 'trade_listing',
-        target_id: listingId,
-        details: JSON.stringify({
-          title: existingListing.title,
-          deleted_by_admin: true
-        }),
-        created_at: new Date().toISOString()
-      });
-    } catch (logError) {
-      console.warn('Could not log admin action:', logError);
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'Trade listing deleted successfully'
-    });
-
-  } catch (error) {
-    console.error('Delete listing error:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to delete trade listing'
     }, { status: 500 });
   }
 }

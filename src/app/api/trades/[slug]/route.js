@@ -1,7 +1,6 @@
-// app/api/trades/[slug]/offers/route.js
+// app/api/trades/[slug]/route.js
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { headers } from 'next/headers'; // ← LÄGG TILL
 import { verifyToken } from '@/lib/auth/jwt';
 
 const supabase = createClient(
@@ -124,9 +123,8 @@ export async function POST(request, { params }) {
     const { slug } = await params;
     const body = await request.json();
     
-    // ← FIX: Verify auth med headers()
-    const headersList = await headers();
-    const authHeader = headersList.get('authorization');
+    // ✅ FIXED: Use request.headers directly
+    const authHeader = request.headers.get('authorization');
     
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ 
@@ -289,6 +287,162 @@ export async function POST(request, { params }) {
     return NextResponse.json({
       success: false,
       message: 'Failed to create offer'
+    }, { status: 500 });
+  }
+}
+
+// DELETE - Delete listing (requires auth and ownership)
+export async function DELETE(request, { params }) {
+  try {
+    const { slug } = await params;
+    
+    // ✅ FIXED: Use request.headers directly
+    const authHeader = request.headers.get('authorization');
+    
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ 
+        success: false, 
+        message: 'Authorization required' 
+      }, { status: 401 });
+    }
+
+    const token = authHeader.substring(7);
+    const decoded = verifyToken(token);
+
+    if (!decoded) {
+      return NextResponse.json({ 
+        success: false, 
+        message: 'Invalid or expired token' 
+      }, { status: 401 });
+    }
+
+    if (!slug) {
+      return NextResponse.json({
+        success: false,
+        message: 'Listing ID is required'
+      }, { status: 400 });
+    }
+
+    // Try both table names (trade_listings or listings)
+    let listing = null;
+    let listingId = null;
+    let tableName = 'listings'; // Default
+    
+    // Try listings table first
+    if (isNaN(slug)) {
+      const { data: listingData } = await supabase
+        .from('listings')
+        .select('id, user_id, title')
+        .eq('slug', slug)
+        .single();
+      
+      if (listingData) {
+        listing = listingData;
+        listingId = listingData.id;
+        tableName = 'listings';
+      }
+    } else {
+      listingId = parseInt(slug);
+      const { data: listingData } = await supabase
+        .from('listings')
+        .select('id, user_id, title')
+        .eq('id', listingId)
+        .single();
+      
+      if (listingData) {
+        listing = listingData;
+        tableName = 'listings';
+      }
+    }
+    
+    // If not found, try trade_listings table
+    if (!listing) {
+      if (isNaN(slug)) {
+        const { data: listingData } = await supabase
+          .from('trade_listings')
+          .select('id, user_id, title')
+          .eq('slug', slug)
+          .single();
+        
+        if (listingData) {
+          listing = listingData;
+          listingId = listingData.id;
+          tableName = 'trade_listings';
+        }
+      } else {
+        const { data: listingData } = await supabase
+          .from('trade_listings')
+          .select('id, user_id, title')
+          .eq('id', listingId)
+          .single();
+        
+        if (listingData) {
+          listing = listingData;
+          tableName = 'trade_listings';
+        }
+      }
+    }
+    
+    if (!listing) {
+      return NextResponse.json({
+        success: false,
+        message: 'Listing not found'
+      }, { status: 404 });
+    }
+
+    // Check ownership (or admin)
+    const isOwner = listing.user_id === decoded.id;
+    const isAdmin = decoded.role === 'admin';
+    
+    if (!isOwner && !isAdmin) {
+      return NextResponse.json({
+        success: false,
+        message: 'You do not have permission to delete this listing'
+      }, { status: 403 });
+    }
+
+    // Delete related data first (to avoid foreign key constraints)
+    // Use Promise.allSettled to continue even if some deletions fail
+    const deleteResults = await Promise.allSettled([
+      supabase.from('trade_offers').delete().eq('listing_id', listingId),
+      supabase.from('trade_items').delete().eq('listing_id', listingId),
+      supabase.from('listing_questions').delete().eq('listing_id', listingId),
+      supabase.from('images').delete().eq('listing_id', listingId)
+    ]);
+
+    // Log any failed deletions but continue
+    deleteResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.warn(`Failed to delete related data ${index}:`, result.reason);
+      }
+    });
+
+    // Delete the listing
+    const { error: deleteError } = await supabase
+      .from(tableName)
+      .delete()
+      .eq('id', listingId);
+
+    if (deleteError) {
+      console.error('Error deleting listing:', deleteError);
+      return NextResponse.json({
+        success: false,
+        message: `Failed to delete listing: ${deleteError.message}`,
+        error: deleteError.message
+      }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Listing deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Error deleting listing:', error);
+    return NextResponse.json({
+      success: false,
+      message: 'Failed to delete listing',
+      error: error.message
     }, { status: 500 });
   }
 }

@@ -1,8 +1,6 @@
-// src/components/CookieConsent.js
 'use client';
 
 import { useState, useEffect } from 'react';
-import Alert from './Alert';
 
 const CookieConsent = () => {
   const [showConsent, setShowConsent] = useState(false);
@@ -94,49 +92,45 @@ const CookieConsent = () => {
 
   return (
     <>
-      {/* Backdrop overlay to block interaction */}
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-40"></div>
+      {/* Backdrop overlay */}
+      <div className="fixed inset-0 bg-black/50 z-40" />
       
-      {/* Cookie consent modal */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 p-4">
-        <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-2xl border border-gray-200 p-6">
-          <div className="flex items-start gap-4">
-            <div className="text-2xl">🍪</div>
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">Cookie-inställningar</h3>
+      {/* Cookie consent modal - Mobile First */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 p-3 sm:p-4">
+        <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-2xl border border-gray-200 p-4 sm:p-6">
+          <div className="flex items-start gap-3 sm:gap-4">
+            <div className="text-xl sm:text-2xl flex-shrink-0">🍪</div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base font-bold text-gray-900 mb-2 sm:text-lg sm:mb-3">Cookie-inställningar</h3>
               <div>
-                <p className="mb-4 text-sm leading-relaxed text-gray-900">
+                <p className="mb-4 text-xs leading-relaxed text-gray-900 sm:text-sm">
                   Vi använder cookies för att förbättra din upplevelse, visa personligt innehåll 
                   och analysera vår trafik. Genom att klicka Acceptera alla samtycker du till 
                   vår användning av cookies.
                   <br />
                   <a 
                     href="/privacy" 
-                    className="text-green-600 hover:text-green-800 underline"
+                    className="text-green-600 underline"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
                     Läs mer i vår integritetspolicy
                   </a>
                 </p>
-                <div className="flex gap-3 justify-center flex-wrap">
+                <div className="flex flex-col gap-2 sm:flex-row sm:gap-3 sm:justify-center">
                   <button
                     onClick={handleAccept}
-                    className="group bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white py-3 px-6 rounded-2xl transition-all duration-300 font-semibold shadow-xl hover:shadow-2xl flex items-center justify-center transform hover:-translate-y-1 relative overflow-hidden text-sm"
+                    className="bg-gradient-to-r from-green-500 to-green-600 active:from-green-600 active:to-green-700 text-white py-3 px-5 rounded-xl font-semibold shadow-lg flex items-center justify-center text-sm sm:py-3 sm:px-6"
                   >
-                    {/* Button shine effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
                     Acceptera alla cookies
-                    <span className="ml-2 group-hover:translate-x-1 transition-transform duration-200">✓</span>
+                    <span className="ml-2">✓</span>
                   </button>
                   <button
                     onClick={handleDecline}
-                    className="group bg-gradient-to-r from-green-400 to-green-500 hover:from-green-500 hover:to-green-600 text-white py-3 px-6 rounded-2xl transition-all duration-300 font-semibold shadow-xl hover:shadow-2xl flex items-center justify-center transform hover:-translate-y-1 relative overflow-hidden text-sm"
+                    className="bg-gradient-to-r from-gray-100 to-gray-200 active:from-gray-200 active:to-gray-300 text-gray-800 py-3 px-5 rounded-xl font-semibold shadow-md flex items-center justify-center text-sm sm:py-3 sm:px-6"
                   >
-                    {/* Button shine effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
                     Avvisa alla
-                    <span className="ml-2 group-hover:translate-x-1 transition-transform duration-200">✗</span>
+                    <span className="ml-2">✗</span>
                   </button>
                 </div>
                 <p className="text-xs text-gray-500 text-center mt-3">

@@ -77,7 +77,7 @@ export default function ContactPageClient() {
           <div className="flex justify-center mb-6">
             <div className="w-16 h-16 bg-gradient-to-br from-green-400 via-green-500 to-green-600 rounded-2xl shadow-lg flex items-center justify-center relative" aria-hidden="true">
               <Image
-                src="/Swapdealsemoji.png"
+                src="/Swapdealsemoji.webp"
                 alt="SwapDeals Logotyp"
                 width={36}
                 height={36}
@@ -138,7 +138,7 @@ export default function ContactPageClient() {
             <div className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl border border-green-200/50" role="region" aria-labelledby="mission-heading">
               <h3 id="mission-heading" className="font-semibold text-green-800 mb-3">🌱 Vårt uppdrag</h3>
               <p className="text-sm text-green-700 leading-relaxed">
-                SwapDeals gör det enkelt att byta, sälja och köpa begagnade varor på ett hållbart sätt. 
+                SwapDeals gör det enkelt att byta begagnade varor på ett hållbart sätt. 
                 Tillsammans skapar vi en mer cirkulär ekonomi för en bättre framtid.
               </p>
             </div>
@@ -277,7 +277,7 @@ export default function ContactPageClient() {
             <article className="p-6 bg-white/80 backdrop-blur-sm rounded-2xl border border-green-200/50 shadow-lg">
               <h3 className="font-semibold text-gray-800 mb-3">Hur fungerar SwapDeals?</h3>
               <p className="text-gray-600 text-sm">
-                SwapDeals gör det enkelt att byta, sälja och köpa begagnade varor. Skapa ett konto, 
+                SwapDeals gör det enkelt att byta begagnade varor. Skapa ett konto, 
                 lägg upp dina saker och börja handla med andra användare för en mer hållbar framtid.
               </p>
             </article>

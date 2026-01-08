@@ -1,16 +1,42 @@
-// ============================================================================
-// FILE 1: app/api/admin/trade-listings/route.js
-// List all trade listings with pagination and filters
-// ============================================================================
+// app/api/admin/trade-listings/route.js
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { verifyToken } from '@/lib/auth/jwt';
 
-// GET - List all trade listings
+async function verifyAdmin(request) {
+  const authHeader = request.headers.get('authorization');
+  
+  if (!authHeader?.startsWith('Bearer ')) {
+    return { error: 'Authorization required', status: 401 };
+  }
+
+  const token = authHeader.substring(7);
+  const decoded = verifyToken(token);
+
+  if (!decoded) {
+    return { error: 'Invalid or expired token', status: 401 };
+  }
+
+  if (decoded.role !== 'admin') {
+    return { error: 'Admin access required', status: 403 };
+  }
+
+  return { user: decoded };
+}
+
 export async function GET(request) {
+  const authCheck = await verifyAdmin(request);
+  if (authCheck.error) {
+    return NextResponse.json({ 
+      success: false, 
+      error: authCheck.error 
+    }, { status: authCheck.status });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page')) || 1;
-    const limit = parseInt(searchParams.get('limit')) || 20;
+    const limit = parseInt(searchParams.get('limit')) || 100;
     const status = searchParams.get('status');
     const search = searchParams.get('search');
     const offset = (page - 1) * limit;
@@ -43,7 +69,7 @@ export async function GET(request) {
 
     if (error) throw error;
 
-    const transformedListings = listings.map(listing => ({
+    const formatted = listings.map(listing => ({
       id: listing.id,
       user_id: listing.user_id,
       title: listing.title,
@@ -60,7 +86,7 @@ export async function GET(request) {
 
     return NextResponse.json({
       success: true,
-      data: transformedListings,
+      data: formatted,
       pagination: {
         page,
         limit,
@@ -71,10 +97,10 @@ export async function GET(request) {
     });
 
   } catch (error) {
-    console.error('Trade listings API error:', error);
+    console.error('Fetch listings error:', error);
     return NextResponse.json({
       success: false,
-      error: 'Failed to fetch trade listings'
+      error: 'Failed to fetch listings'
     }, { status: 500 });
   }
 }

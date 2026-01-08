@@ -276,7 +276,7 @@ export default function TradePage() {
             <div className="animate-spin rounded-full h-32 w-32 border-4 border-green-200 border-t-green-600"></div>
             <div className="absolute inset-0 flex items-center justify-center">
               <Image
-                src="/Swapdealsemoji.png"
+                src="/Swapdealsemoji.webp"
                 alt="SwapDeals Logo"
                 width={40}
                 height={40}
@@ -509,7 +509,7 @@ export default function TradePage() {
                   {trade.seller_response && (
                     <div className="bg-blue-50 border-l-4 border-blue-500 p-6 rounded-2xl shadow-sm transform hover:scale-105 transition-all duration-300">
                       <h3 className="font-bold text-blue-900 mb-3 flex items-center gap-2 text-lg">
-                        💼 Säljarens Anteckningar
+                        💼 arens Anteckningar
                       </h3>
                       <p className="text-blue-800 leading-relaxed font-medium">{trade.seller_response}</p>
                     </div>

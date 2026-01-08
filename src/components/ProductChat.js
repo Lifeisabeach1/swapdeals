@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Send, MessageCircle } from 'lucide-react';
 
 export default function ProductChat({ 
@@ -67,25 +67,9 @@ export default function ProductChat({
     }
   }, [unreadCount, onUnreadChange]);
 
-  // Load messages when modal opens
-  useEffect(() => {
-    if (isOpen && listing?.id) {
-      loadMessages();
-    }
-  }, [isOpen, listing?.id]);
-
-  // Poll for new messages when modal is closed
-  useEffect(() => {
-    if (!isOpen && listing?.id) {
-      const interval = setInterval(() => {
-        loadMessages(true); // Silent load
-      }, 30000); // Check every 30 seconds
-
-      return () => clearInterval(interval);
-    }
-  }, [isOpen, listing?.id]);
-
-  const loadMessages = async (silent = false) => {
+  const loadMessages = useCallback(async (silent = false) => {
+    if (!listing?.id) return;
+    
     try {
       if (!silent) setLoadingMessages(true);
       
@@ -111,7 +95,25 @@ export default function ProductChat({
     } finally {
       if (!silent) setLoadingMessages(false);
     }
-  };
+  }, [listing?.id, token]);
+
+  // Load messages when modal opens
+  useEffect(() => {
+    if (isOpen && listing?.id) {
+      loadMessages();
+    }
+  }, [isOpen, listing?.id, loadMessages]);
+
+  // Poll for new messages when modal is closed
+  useEffect(() => {
+    if (!isOpen && listing?.id) {
+      const interval = setInterval(() => {
+        loadMessages(true); // Silent load
+      }, 30000); // Check every 30 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [isOpen, listing?.id, loadMessages]);
 
   const handleSendMessage = async (e) => {
     e.preventDefault();

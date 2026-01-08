@@ -1,491 +1,278 @@
-// Simple Admin Dashboard - Just Delete Users & Posts
 'use client';
 
-import { useState, useEffect } from 'react';
-import { LogOut, Trash2, RefreshCw, Users, Package, MessageSquare } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { LogOut, Trash2, RefreshCw, Users, Package, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 const AdminDashboard = () => {
-  const [user, setUser] = useState(null);
+  const [authToken, setAuthToken] = useState(null);
+  const [authUser, setAuthUser] = useState(null);
   const [users, setUsers] = useState([]);
   const [listings, setListings] = useState([]);
-  const [testimonials, setTestimonials] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('users');
+  const [selectedListings, setSelectedListings] = useState([]);
 
-  // Login check
-  useEffect(() => {
-    const token = localStorage.getItem('adminToken');
-    const userData = localStorage.getItem('adminUser');
-    
-    if (token && userData) {
-      try {
-        const parsedUser = JSON.parse(userData);
-        if (parsedUser.role === 'admin') {
-          setUser(parsedUser);
-        }
-      } catch {
-        handleLogout();
-      }
-    }
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem('adminToken');
-    localStorage.removeItem('adminUser');
-    setUser(null);
-  };
-
-  const getAuthHeaders = () => ({
-    'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
+  const getAuthHeaders = useCallback(() => ({
+    'Authorization': `Bearer ${authToken}`,
     'Content-Type': 'application/json'
-  });
+  }), [authToken]);
 
-  // Fetch data
+  const fetchUsers = useCallback(async () => {
+    const response = await fetch('/api/admin/users', { headers: getAuthHeaders() });
+    const data = await response.json();
+    if (data.success && data.users) setUsers(data.users);
+  }, [getAuthHeaders]);
+
+  const fetchListings = useCallback(async () => {
+    const response = await fetch('/api/admin/trade-listings', { headers: getAuthHeaders() });
+    const data = await response.json();
+    if (data.success) setListings(data.data || []);
+  }, [getAuthHeaders]);
+
   useEffect(() => {
-    if (user) {
-      fetchUsers();
-      fetchListings();
-      fetchTestimonials();
-    }
-  }, [user]);
-
-  const fetchUsers = async () => {
-    try {
+    if (authUser && authToken) {
       setLoading(true);
-      const response = await fetch('/api/admin/users', {
-        headers: getAuthHeaders()
-      });
-      const data = await response.json();
-      if (data.users) setUsers(data.users);
-    } catch (err) {
-      setError('Failed to load users');
-    } finally {
-      setLoading(false);
+      Promise.all([fetchUsers(), fetchListings()])
+        .catch(err => setError('Failed to load data'))
+        .finally(() => setLoading(false));
     }
-  };
+  }, [authUser, authToken, fetchUsers, fetchListings]);
 
-  const fetchListings = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('/api/admin/content', {
-        headers: getAuthHeaders()
-      });
-      const data = await response.json();
-      if (data.content || data.data) {
-        setListings(data.content || data.data);
-      }
-    } catch (err) {
-      setError('Failed to load listings');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchTestimonials = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('/api/admin/testimonials', {
-        headers: getAuthHeaders()
-      });
-      const data = await response.json();
-      if (data.testimonials) {
-        setTestimonials(data.testimonials);
-      }
-    } catch (err) {
-      setError('Failed to load testimonials');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Delete user
   const handleDeleteUser = async (userId) => {
     if (!confirm('Delete this user and all their listings?')) return;
-    
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await fetch(`/api/admin/users/${userId}`, {
+      const res = await fetch(`/api/admin/users/${userId}`, {
         method: 'DELETE',
         headers: getAuthHeaders()
       });
-      
-      if (response.ok) {
+      if (res.ok) {
         setUsers(users.filter(u => u.id !== userId));
         alert('User deleted');
       } else {
         alert('Failed to delete user');
       }
     } catch (err) {
-      alert('Error deleting user');
+      alert('Error: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Delete listing
   const handleDeleteListing = async (listingId) => {
     if (!confirm('Delete this listing?')) return;
-    
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await fetch('/api/admin/content', {
+      const res = await fetch(`/api/admin/trade-listings/${listingId}`, {
         method: 'DELETE',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ 
-          contentId: listingId, 
-          contentType: 'trade' 
-        })
+        headers: getAuthHeaders()
       });
       
-      if (response.ok) {
+      if (res.ok) {
         setListings(listings.filter(l => l.id !== listingId));
         alert('Listing deleted');
       } else {
-        alert('Failed to delete listing');
+        const data = await res.json();
+        alert(data.error || 'Failed to delete');
       }
     } catch (err) {
-      alert('Error deleting listing');
+      alert('Error: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Delete testimonial
-  const handleDeleteTestimonial = async (testimonialId) => {
-    if (!confirm('Delete this testimonial?')) return;
-    
-    try {
-      setLoading(true);
-      const response = await fetch('/api/admin/testimonials', {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ testimonialId })
-      });
-      
-      if (response.ok) {
-        setTestimonials(testimonials.filter(t => t.id !== testimonialId));
-        alert('Testimonial deleted');
-      } else {
-        alert('Failed to delete testimonial');
+  const handleBatchDelete = async () => {
+    if (selectedListings.length === 0) return;
+    if (!confirm(`Delete ${selectedListings.length} listing(s)?`)) return;
+
+    setLoading(true);
+    let success = 0, failed = 0;
+
+    for (const id of selectedListings) {
+      try {
+        const res = await fetch(`/api/admin/trade-listings/${id}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
+        res.ok ? success++ : failed++;
+      } catch {
+        failed++;
       }
-    } catch (err) {
-      alert('Error deleting testimonial');
-    } finally {
-      setLoading(false);
     }
+
+    setLoading(false);
+    setSelectedListings([]);
+    alert(`Deleted ${success}. Failed: ${failed}`);
+    fetchListings();
   };
 
-  // Login form
-  if (!user) {
-    return <AdminLogin onLoginSuccess={setUser} />;
-  }
+  if (!authUser) return <AdminLogin onLogin={(token, user) => { setAuthToken(token); setAuthUser(user); }} />;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-              <p className="text-gray-600">Welcome, {user.username || user.email}</p>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-            >
-              <LogOut size={18} />
-              Logout
-            </button>
+        <div className="bg-white rounded-lg shadow p-4 mb-4 flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+            <p className="text-sm text-gray-600">{authUser.username || authUser.email}</p>
           </div>
+          <button onClick={() => { setAuthToken(null); setAuthUser(null); }} className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+            <LogOut size={16} className="inline mr-2" />Logout
+          </button>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-6 mb-6">
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm">Total Users</p>
-                <p className="text-3xl font-bold text-blue-600">{users.length}</p>
-              </div>
-              <Users size={32} className="text-blue-500" />
-            </div>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="bg-blue-500 text-white rounded-lg shadow p-6">
+            <p className="text-sm opacity-80">Total Users</p>
+            <p className="text-3xl font-bold">{users.length}</p>
           </div>
-          
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm">Total Listings</p>
-                <p className="text-3xl font-bold text-green-600">{listings.length}</p>
-              </div>
-              <Package size={32} className="text-green-500" />
-            </div>
+          <div className="bg-green-500 text-white rounded-lg shadow p-6">
+            <p className="text-sm opacity-80">Total Listings</p>
+            <p className="text-3xl font-bold">{listings.length}</p>
           </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm">Testimonials</p>
-                <p className="text-3xl font-bold text-purple-600">{testimonials.length}</p>
-              </div>
-              <MessageSquare size={32} className="text-purple-500" />
-            </div>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-4 mb-6">
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium ${
-              activeTab === 'users'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            <Users size={18} />
-            Users
-          </button>
-          <button
-            onClick={() => setActiveTab('listings')}
-            className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium ${
-              activeTab === 'listings'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            <Package size={18} />
-            Listings
-          </button>
-          <button
-            onClick={() => setActiveTab('testimonials')}
-            className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium ${
-              activeTab === 'testimonials'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            <MessageSquare size={18} />
-            Testimonials
-          </button>
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-            {error}
+          <div className="bg-red-50 border border-red-200 rounded p-3 mb-4 flex items-center gap-2">
+            <AlertCircle size={18} className="text-red-600" />
+            <span className="text-red-800 text-sm">{error}</span>
           </div>
         )}
 
+        {/* Tabs */}
+        <div className="flex gap-2 mb-4">
+          <button onClick={() => setActiveTab('users')} className={`px-4 py-2 rounded ${activeTab === 'users' ? 'bg-blue-600 text-white' : 'bg-white'}`}>
+            Users ({users.length})
+          </button>
+          <button onClick={() => setActiveTab('listings')} className={`px-4 py-2 rounded ${activeTab === 'listings' ? 'bg-green-600 text-white' : 'bg-white'}`}>
+            Listings ({listings.length})
+          </button>
+        </div>
+
         {/* Users Tab */}
         {activeTab === 'users' && (
-          <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
-              <h2 className="text-xl font-bold">Users</h2>
-              <button
-                onClick={fetchUsers}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <RefreshCw size={16} />
-                Refresh
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="p-3 bg-gray-50 border-b flex justify-between items-center">
+              <h2 className="font-bold">Users</h2>
+              <button onClick={fetchUsers} disabled={loading} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">
+                <RefreshCw size={14} className={`inline ${loading ? 'animate-spin' : ''}`} /> Refresh
               </button>
             </div>
-
-            {loading ? (
-              <div className="p-8 text-center">Loading...</div>
-            ) : users.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">No users found</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Joined</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left">ID</th>
+                    <th className="px-4 py-2 text-left">Name</th>
+                    <th className="px-4 py-2 text-left">Email</th>
+                    <th className="px-4 py-2 text-left">Role</th>
+                    <th className="px-4 py-2 text-left">Status</th>
+                    <th className="px-4 py-2 text-left">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map(user => (
+                    <tr key={user.id} className="border-t hover:bg-gray-50">
+                      <td className="px-4 py-2">#{user.id}</td>
+                      <td className="px-4 py-2 font-medium">{user.name || user.username}</td>
+                      <td className="px-4 py-2">{user.email}</td>
+                      <td className="px-4 py-2">
+                        <span className={`px-2 py-1 rounded text-xs ${user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>
+                          {user.role || 'user'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className={`px-2 py-1 rounded text-xs ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          {user.is_active ? 'Active' : 'Banned'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">
+                        {user.role !== 'admin' ? (
+                          <button onClick={() => handleDeleteUser(user.id)} className="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-xs">
+                            <Trash2 size={12} className="inline" /> Delete
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-xs">Protected</span>
+                        )}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {users.map(userItem => (
-                      <tr key={userItem.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 text-sm">{userItem.id}</td>
-                        <td className="px-6 py-4 text-sm font-medium">{userItem.name || userItem.username}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{userItem.email}</td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            userItem.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-                          }`}>
-                            {userItem.role || 'user'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {userItem.created_at ? new Date(userItem.created_at).toLocaleDateString() : 'N/A'}
-                        </td>
-                        <td className="px-6 py-4">
-                          {userItem.role !== 'admin' && (
-                            <button
-                              onClick={() => handleDeleteUser(userItem.id)}
-                              className="flex items-center gap-1 text-red-600 hover:text-red-900"
-                            >
-                              <Trash2 size={16} />
-                              Delete
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
         {/* Listings Tab */}
         {activeTab === 'listings' && (
-          <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
-              <h2 className="text-xl font-bold">Listings</h2>
-              <button
-                onClick={fetchListings}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <RefreshCw size={16} />
-                Refresh
-              </button>
-            </div>
-
-            {loading ? (
-              <div className="p-8 text-center">Loading...</div>
-            ) : listings.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">No listings found</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {listings.map(listing => (
-                      <tr key={listing.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 text-sm">{listing.id}</td>
-                        <td className="px-6 py-4 text-sm">
-                          <div className="max-w-xs truncate">{listing.description || 'No description'}</div>
-                        </td>
-                        <td className="px-6 py-4 text-sm">
-                          {listing.seller_username || listing.buyer_username || 'Unknown'}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            listing.status === 'completed' ? 'bg-green-100 text-green-800' :
-                            listing.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                            'bg-blue-100 text-blue-800'
-                          }`}>
-                            {listing.status || 'active'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {listing.created_at ? new Date(listing.created_at).toLocaleDateString() : 'N/A'}
-                        </td>
-                        <td className="px-6 py-4">
-                          <button
-                            onClick={() => handleDeleteListing(listing.id)}
-                            className="flex items-center gap-1 text-red-600 hover:text-red-900"
-                          >
-                            <Trash2 size={16} />
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="p-3 bg-gray-50 border-b flex justify-between items-center">
+              <h2 className="font-bold">Trade Listings</h2>
+              <div className="flex gap-2">
+                {selectedListings.length > 0 && (
+                  <button onClick={handleBatchDelete} className="px-3 py-1 bg-red-600 text-white rounded text-sm">
+                    <Trash2 size={14} className="inline" /> Delete ({selectedListings.length})
+                  </button>
+                )}
+                <button onClick={fetchListings} disabled={loading} className="px-3 py-1 bg-green-600 text-white rounded text-sm">
+                  <RefreshCw size={14} className={`inline ${loading ? 'animate-spin' : ''}`} /> Refresh
+                </button>
               </div>
-            )}
-          </div>
-        )}
-
-        {/* Testimonials Tab */}
-        {activeTab === 'testimonials' && (
-          <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
-              <h2 className="text-xl font-bold">Testimonials</h2>
-              <button
-                onClick={fetchTestimonials}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <RefreshCw size={16} />
-                Refresh
-              </button>
             </div>
-
-            {loading ? (
-              <div className="p-8 text-center">Loading...</div>
-            ) : testimonials.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">No testimonials found</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Text</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2">
+                      <input type="checkbox" checked={selectedListings.length === listings.length && listings.length > 0}
+                        onChange={() => setSelectedListings(selectedListings.length === listings.length ? [] : listings.map(l => l.id))}
+                        className="rounded" />
+                    </th>
+                    <th className="px-4 py-2 text-left">ID</th>
+                    <th className="px-4 py-2 text-left">Title</th>
+                    <th className="px-4 py-2 text-left">User</th>
+                    <th className="px-4 py-2 text-left">Category</th>
+                    <th className="px-4 py-2 text-left">Status</th>
+                    <th className="px-4 py-2 text-left">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {listings.map(listing => (
+                    <tr key={listing.id} className={`border-t hover:bg-gray-50 ${selectedListings.includes(listing.id) ? 'bg-green-50' : ''}`}>
+                      <td className="px-4 py-2">
+                        <input type="checkbox" checked={selectedListings.includes(listing.id)}
+                          onChange={() => setSelectedListings(prev => prev.includes(listing.id) ? prev.filter(id => id !== listing.id) : [...prev, listing.id])}
+                          className="rounded" />
+                      </td>
+                      <td className="px-4 py-2">#{listing.id}</td>
+                      <td className="px-4 py-2">
+                        <div className="font-medium">{listing.title || 'No title'}</div>
+                        {listing.description && <div className="text-xs text-gray-500 truncate max-w-xs">{listing.description}</div>}
+                      </td>
+                      <td className="px-4 py-2">{listing.username || 'Unknown'}</td>
+                      <td className="px-4 py-2">{listing.category || 'N/A'}</td>
+                      <td className="px-4 py-2">
+                        <span className={`px-2 py-1 rounded text-xs ${
+                          listing.status === 'active' ? 'bg-blue-100 text-blue-800' :
+                          listing.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {listing.status || 'active'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <button onClick={() => handleDeleteListing(listing.id)} className="px-2 py-1 text-red-600 hover:bg-red-50 rounded text-xs">
+                          <Trash2 size={12} className="inline" /> Delete
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {testimonials.map(testimonial => (
-                      <tr key={testimonial.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 text-sm">{testimonial.id}</td>
-                        <td className="px-6 py-4 text-sm font-medium">{testimonial.name}</td>
-                        <td className="px-6 py-4 text-sm">{testimonial.location}</td>
-                        <td className="px-6 py-4 text-sm">{testimonial.rating} ⭐</td>
-                        <td className="px-6 py-4 text-sm">
-                          <div className="max-w-xs truncate">{testimonial.text}</div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex gap-1">
-                            <span className={`px-2 py-1 text-xs rounded-full ${
-                              testimonial.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                            }`}>
-                              {testimonial.isActive ? 'Active' : 'Inactive'}
-                            </span>
-                            {testimonial.isVerified && (
-                              <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
-                                Verified
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <button
-                            onClick={() => handleDeleteTestimonial(testimonial.id)}
-                            className="flex items-center gap-1 text-red-600 hover:text-red-900"
-                          >
-                            <Trash2 size={16} />
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -493,88 +280,86 @@ const AdminDashboard = () => {
   );
 };
 
-// Simple Admin Login Component
-const AdminLogin = ({ onLoginSuccess }) => {
+const AdminLogin = ({ onLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
+    if (!email || !password) return setError('Enter email and password');
     setLoading(true);
     setError('');
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
+      const data = await res.json();
 
-      const result = await response.json();
-
-      // Handle your API structure: { success, token, user }
-      if (result.success && result.user?.role === 'admin') {
-        localStorage.setItem('adminToken', result.token);
-        localStorage.setItem('adminUser', JSON.stringify(result.user));
-        onLoginSuccess(result.user);
-      } else if (result.success) {
+      if (data.success && data.user?.role === 'admin') {
+        onLogin(data.token, data.user);
+      } else if (data.success) {
         setError('Admin access required');
       } else {
-        setError(result.error || 'Login failed');
+        setError(data.error || 'Login failed');
       }
     } catch (err) {
-      setError('Login failed: ' + err.message);
+      setError('Network error');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-      <div className="bg-white p-8 rounded-lg shadow-md w-96">
-        <h1 className="text-2xl font-bold text-center mb-6">Admin Login</h1>
+    <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-8">
+        <div className="text-center mb-6">
+          <div className="inline-block p-3 bg-blue-100 rounded-full mb-3">
+            <Users size={32} className="text-blue-600" />
+          </div>
+          <h1 className="text-2xl font-bold mb-1">Admin Portal</h1>
+          <p className="text-gray-600 text-sm">Sign in to access dashboard</p>
+        </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
+          <div className="bg-red-50 border border-red-200 rounded p-3 mb-4 flex items-center gap-2">
+            <AlertCircle size={16} className="text-red-600" />
+            <span className="text-red-800 text-sm">{error}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-2">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg"
-              placeholder="admin@example.com"
-            />
+            <label className="block text-sm font-medium mb-1">Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none"
+              placeholder="admin@example.com" />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Password</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg"
-              placeholder="Your password"
-            />
+            <label className="block text-sm font-medium mb-1">Password</label>
+            <div className="relative">
+              <input type={showPassword ? 'text' : 'password'} value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
+                className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder="Enter password" />
+              <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-2.5 text-gray-500">
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading ? 'Logging in...' : 'Sign In'}
+          <button onClick={handleSubmit} disabled={loading || !email || !password}
+            className="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 font-medium">
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
-        </form>
+        </div>
       </div>
     </div>
   );
