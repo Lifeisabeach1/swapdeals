@@ -2,7 +2,7 @@
 
 export const metadata = {
   metadataBase: new URL('https://swapdeals.se'),
-  title: 'Kontakta Oss | SwapDeals',
+  title: 'Kontakta Oss | Etisk Handel | SwapDeals',
   description: 'Har du frågor om SwapDeals? Kontakta oss för hjälp med byteshandel, teknisk support eller feedback. ✓ Svar inom 24h ✓ Rikstäckande tjänst ✓ Hållbar byteshandel',
   authors: [{ name: 'SwapDeals', url: 'https://swapdeals.se' }],
   creator: 'SwapDeals',

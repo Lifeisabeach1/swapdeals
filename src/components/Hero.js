@@ -34,7 +34,7 @@ export default function Hero() {
       borderColor: "border-yellow-200"
     },
     { 
-      title: "Kom överens & Byt",
+      title: "Kom överens & Byt eller skänk bort",
       description: "Slutför detaljer och genomför ditt byte",
       icon: RefreshCw,
       bgColor: "from-emerald-400 to-emerald-500",
@@ -53,7 +53,7 @@ export default function Hero() {
         {/* Header - Simplified */}
         <header className="mb-6 sm:mb-10">
           <h1 className="text-xl font-bold text-green-700 sm:text-2xl lg:text-3xl">
-            SwapDeals Bytesmarknad | Second Hand | Hållbart
+            SwapDeals Bytesmarknad | Second Hand | Bortskänkes
           </h1>
         </header>
 
@@ -77,7 +77,7 @@ export default function Hero() {
               Sveriges smartaste bytesplattform för begagnade prylar. 
             </p>
             <p className="text-base text-green-700 font-semibold mb-6 sm:text-lg">
-              Byt kläder, möbler, elektronik & mer helt kostnadsfritt och hållbart!
+              Byt, skänk bort, hitta kläder, möbler, elektronik eller annat lev hållbart!
             </p>
 
             {/* Action Buttons - Stacked on mobile */}
@@ -87,7 +87,7 @@ export default function Hero() {
                 className="bg-gradient-to-r from-green-500 to-emerald-600 active:from-green-600 active:to-emerald-700 text-white font-bold text-base py-3.5 px-5 rounded-xl flex items-center justify-center shadow-lg sm:text-lg sm:py-4"
               >
                 <ArrowLeftRight className="w-5 h-5 mr-2" />
-                Börja Byta Nu Gratis
+                Skapa din annons 
               </a>
               
               <a
@@ -121,10 +121,7 @@ export default function Hero() {
         <section className="mb-10 sm:mb-14 lg:mb-16">
           <div className="bg-white/95 rounded-2xl shadow-lg border border-green-200/50 p-5 sm:p-7 lg:p-8">
             <div className="text-center mb-6 sm:mb-8">
-              <div className="inline-flex items-center bg-green-100 rounded-full px-3 py-1.5 mb-3">
-                <Shield className="w-4 h-4 text-green-600 mr-1.5" />
-                <span className="text-green-800 font-semibold text-xs sm:text-sm">Fördelarna med SwapDeals</span>
-              </div>
+             
               <h3 className="text-2xl font-bold text-gray-900 mb-2 sm:text-3xl">
                 Varför Välja SwapDeals Bytesplattform?
               </h3>
@@ -140,7 +137,7 @@ export default function Hero() {
                 </div>
                 <h4 className="text-base font-bold text-gray-900 mb-2 sm:text-lg">Hållbar Byteshandel Online</h4>
                 <p className="text-sm text-gray-700">
-                  Ge begagnade prylar nytt liv genom gratis byteshandel. Miljövänligt alternativ till nyköp.
+                  Ge begagnade prylar nytt liv genom byteshandel. Miljövänligt alternativ till nyköp.
                 </p>
               </div>
               
@@ -150,7 +147,7 @@ export default function Hero() {
                 </div>
                 <h4 className="text-base font-bold text-gray-900 mb-2 sm:text-lg">100% Gratis Bytesmarknad</h4>
                 <p className="text-sm text-gray-700">
-                  Byt kläder, möbler, elektronik & mer utan pengar. Kostnadsfri bytesplattform där värde möter värde.
+                  Byt, skänk eller hitta kläder, möbler, elektronik & mer utan pengar. Kostnadsfri plattform där värde möter värde.
                 </p>
               </div>
               
@@ -240,7 +237,7 @@ export default function Hero() {
               </h3>
               
               <p className="text-gray-700 mb-5 text-base">
-                Byt föremål du inte längre behöver mot saker du faktiskt vill ha. Bättre för din plånbok och planeten.
+                Byt eller skänk bort föremål du inte längre behöver mot saker du faktiskt vill ha. Bättre för din plånbok och planeten.
               </p>
               
               <div className="space-y-3 mb-5">

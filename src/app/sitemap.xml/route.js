@@ -10,6 +10,7 @@ const staticRoutes = [
   "/swapdeals-guide",
   "/tradeform",
   "/tradelistingpage",
+  "/tradedetailpage",
   "/my-trades",
   "/hallbar-konsumtion",
   "/hallbarhet",
@@ -23,6 +24,13 @@ const staticRoutes = [
   "/swapdeal-uppsala",
   "/swapdeal-linkoping",
   "/swapdeal-vasteras",
+  "/swapdeal-orebro",
+  "/newtradescarousel",
+  "/second-hand",
+  "/blogg",
+  "/contexts",
+  "/conversations",
+  "/api",
 ];
 
 // Priority & change frequency optimized for SEO
@@ -40,12 +48,16 @@ const priorityMap = {
   "/swapdeals-guide": { priority: "0.8", changefreq: "monthly" },
   "/kontakt": { priority: "0.8", changefreq: "monthly" },
   "/hallbar-konsumtion": { priority: "0.8", changefreq: "monthly" },
-   "/hallbarhet": { priority: "0.8", changefreq: "monthly" },
+  "/hallbarhet": { priority: "0.8", changefreq: "monthly" },
   "/my-trades": { priority: "0.7", changefreq: "daily" },
   "/alla-omdomen": { priority: "0.7", changefreq: "weekly" },
   "/testimonial": { priority: "0.6", changefreq: "weekly" },
   "/privacy": { priority: "0.5", changefreq: "yearly" },
   "/terms": { priority: "0.5", changefreq: "yearly" },
+  "/tradedetailpage": { priority: "0.7", changefreq: "daily" },
+  "/newtradescarousel": { priority: "0.6", changefreq: "daily" },
+  "/second-hand": { priority: "0.7", changefreq: "weekly" },
+  "/blogg": { priority: "0.8", changefreq: "weekly" },
 };
 
 export const dynamic = "force-static";

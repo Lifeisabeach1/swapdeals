@@ -1,6 +1,6 @@
 // app/api/auth/register/route.js
 import { NextResponse } from 'next/server';
-import { hash } from 'bcrypt';
+import { hash } from 'bcryptjs';
 import { supabase } from '@/lib/supabase'; // ← Use centralized client
 import { generateToken } from '@/lib/auth/jwt';
 

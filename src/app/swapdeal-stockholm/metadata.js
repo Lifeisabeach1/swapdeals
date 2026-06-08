@@ -3,7 +3,7 @@
 export const metadata = {
   metadataBase: new URL('https://swapdeals.se'),
   
-  title: 'SwapDeals Stockholm | Hållbar Konsumtion | Second Hand Livsstil',
+  title: 'SwapDeals Stockholm | Hållbar Konsumtion | Bortskänkes',
   
   description: 'Byt det du har mot det du vill ha i Stockholm ✓ Kläder ✓ Leksaker ✓ Fordon ✓ Bra för samhället. Hitta bytesannonser nära dig i Stockholm. Gratis tjänst',
   

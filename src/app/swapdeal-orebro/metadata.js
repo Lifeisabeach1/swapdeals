@@ -3,7 +3,7 @@
 export const metadata = {
   metadataBase: new URL('https://swapdeals.se'),
   
-  title: 'SwapDeals Örebro | Etisk Handel | Begagnat',
+  title: 'SwapDeals Örebro | Begagnat Byt Eller Ge bort',
   
   description: 'Byt second hand prylar kostnadsfritt i Örebro ✓ Begagnade Kläder ✓ Begagnad Elektronik ✓ Begagnade Möbler ✓ Genomtänkt byteshandel. Hitta bytesannonser nära dig i Örebro. 100% gratis!',
   

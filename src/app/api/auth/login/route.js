@@ -3,7 +3,7 @@
 // app/api/auth/login/route.js
 // ============================================
 import { NextResponse } from 'next/server';
-import { compare } from 'bcrypt';
+import { compare } from 'bcryptjs';
 import { createClient } from '@supabase/supabase-js';
 import { generateToken } from '@/lib/auth/jwt';
 
@@ -80,3 +80,4 @@ export async function POST(request) {
     );
   }
 }
+

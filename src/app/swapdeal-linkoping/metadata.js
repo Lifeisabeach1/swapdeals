@@ -3,7 +3,7 @@
 export const metadata = {
   metadataBase: new URL('https://swapdeals.se'),
   
-  title: 'SwapDeals Linköping | Miljövänligt | Second Hand Varor',
+  title: 'SwapDeals Linköping | Miljövänligt | Begagnat Online',
   
   description: 'Byt begagnade prylar gratis i Linköping ✓ Kläder ✓ Elektronik ✓ Möbler ✓ Hållbar byteshandel. Hitta bytesannonser i Centrum, Ryd & hela Linköping. 100% kostnadsfritt!',
   

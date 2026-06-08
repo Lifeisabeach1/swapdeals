@@ -45,7 +45,7 @@ export default function Footer() {
   ];
 
   const contactInfo = [
-    { icon: Mail, text: 'kontakt@swapdeals.se', href: 'mailto:kontakt@swapdeals.se' },
+    { icon: Mail, text: 'swapdeals11@gmail.se' },
     { icon: MapPin, text: 'Uppsala, Sverige' },
     { icon: Clock, text: 'Mån-Fre 9:00-17:00' },
   ];
@@ -185,24 +185,12 @@ export default function Footer() {
                   const Icon = item.icon;
                   return (
                     <li key={index}>
-                      {item.href ? (
-                        <a 
-                          href={item.href}
-                          className="flex items-center gap-3 text-gray-400 hover:text-white text-sm transition-all duration-200 group"
-                        >
-                          <div className="w-9 h-9 rounded-xl bg-green-500/20 backdrop-blur-sm border border-green-500/30 flex items-center justify-center group-hover:bg-green-500/30 group-hover:scale-110 transition-all duration-200">
-                            <Icon className="w-4 h-4 text-green-400" strokeWidth={2} />
-                          </div>
-                          <span className="group-hover:translate-x-1 transition-transform duration-200">{item.text}</span>
-                        </a>
-                      ) : (
-                        <div className="flex items-center gap-3 text-gray-400 text-sm">
-                          <div className="w-9 h-9 rounded-xl bg-green-500/20 backdrop-blur-sm border border-green-500/30 flex items-center justify-center">
-                            <Icon className="w-4 h-4 text-green-400" strokeWidth={2} />
-                          </div>
-                          <span>{item.text}</span>
+                      <div className="flex items-center gap-3 text-gray-400 text-sm">
+                        <div className="w-9 h-9 rounded-xl bg-green-500/20 backdrop-blur-sm border border-green-500/30 flex items-center justify-center">
+                          <Icon className="w-4 h-4 text-green-400" strokeWidth={2} />
                         </div>
-                      )}
+                        <span>{item.text}</span>
+                      </div>
                     </li>
                   );
                 })}

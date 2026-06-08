@@ -10,10 +10,10 @@ export const metadata = {
   metadataBase: new URL('https://swapdeals.se'),
   
   // Title: 50-60 characters optimal, front-load primary keyword
-  title: 'SwapDeals | Second Hand | Hållbar Konsumtion',
+  title: 'SwapDeals | Bortskänkes | Begagnat Online',
   
   // Description: 150-160 characters, includes CTA and benefit-driven copy
-  description: 'Sveriges ledande bytesplattform ✓ Byt begagnade prylar gratis ✓ Hållbart & Miljövänligt ✓ Second Hand. Hitta bytesannonser nära dig!',
+  description: 'Sveriges ledande bytesplattform ✓ Byt begagnade prylar ✓ Hållbart & Miljövänligt ✓ Second Hand. Hitta bytesannonser nära dig!',
   
   // Authors and creator info
   authors: [{ name: 'SwapDeals', url: 'https://swapdeals.se' }],
@@ -48,8 +48,8 @@ export const metadata = {
     locale: 'sv_SE',
     url: 'https://swapdeals.se',
     siteName: 'SwapDeals',
-    title: 'SwapDeals - Byteshandel & Begagnade Prylar | Helt Gratis',
-    description: 'Byt begagnade prylar gratis på Sveriges största bytesplattform. Hållbart, miljövänligt och 100% kostnadsfritt. Hitta tusentals bytesannonser i hela Sverige!',
+    title: 'SwapDeals - Byteshandel & Begagnade Prylar',
+    description: 'Byt begagnade prylar på Sveriges största bytesplattform. Hållbart, miljövänligt och 100% kostnadsfritt. Hitta tusentals bytesannonser i hela Sverige!',
     images: [
       {
         url: '/bytaprylar.webp',
@@ -66,8 +66,8 @@ export const metadata = {
     card: 'summary_large_image',
     site: '@SwapDealsSE',
     creator: '@SwapDealsSE',
-    title: 'SwapDeals - Byt Begagnade Prylar Gratis i Sverige',
-    description: 'Sveriges ledande bytesplattform för hållbar konsumtion. Byt kläder, elektronik, möbler och mer - helt gratis! Gå med idag.',
+    title: 'SwapDeals - Byt Begagnade Prylar i Sverige',
+    description: 'Sveriges ledande bytesplattform för hållbar konsumtion. Byt kläder, elektronik, möbler och mer! Gå med idag.',
     images: {
       url: '/bytaprylar.webp',
       alt: 'SwapDeals - Byteshandel Sverige'
@@ -165,7 +165,7 @@ const HomePage = () => {
                 "url": "https://swapdeals.se",
                 "name": "SwapDeals",
                 "alternateName": "SwapDeals",
-                "description": "Sveriges ledande plattform för hållbar byteshandel - byt begagnade prylar gratis",
+                "description": "Sveriges ledande plattform för hållbar byteshandel - byt begagnade prylar",
                 "publisher": {
                   "@id": "https://swapdeals.se#organization"
                 },
@@ -222,7 +222,7 @@ const HomePage = () => {
                 "@id": "https://swapdeals.se#webpage",
                 "url": "https://swapdeals.se",
                 "name": "SwapDeals - Byteshandel & Begagnade Prylar",
-                "description": "Byt begagnade prylar gratis på Sveriges största bytesplattform. Hållbart, miljövänligt och kostnadsfritt.",
+                "description": "Byt begagnade prylar på Sveriges största bytesplattform. Hållbart, miljövänligt och kostnadsfritt.",
                 "isPartOf": {
                   "@id": "https://swapdeals.se#website"
                 },
@@ -260,7 +260,7 @@ const HomePage = () => {
                     "name": "Hur fungerar byteshandel på SwapDeals?",
                     "acceptedAnswer": {
                       "@type": "Answer",
-                      "text": "På SwapDeals kan du lägga upp bytesannonser helt gratis. Du väljer vad du vill byta bort och vad du söker i utbyte. När någon är intresserad kontaktar ni varandra direkt genom plattformen för att komma överens om bytesdetaljer. Ingen betalning behövs - det är bara att byta prylar!"
+                      "text": "På SwapDeals kan du lägga upp bytesannonser. Du väljer vad du vill byta bort och vad du söker i utbyte. När någon är intresserad kontaktar ni varandra direkt genom plattformen för att komma överens om bytesdetaljer. Ingen betalning behövs - det är bara att byta prylar!"
                     }
                   },
                   {
@@ -268,7 +268,7 @@ const HomePage = () => {
                     "name": "Kostar det något att använda SwapDeals?",
                     "acceptedAnswer": {
                       "@type": "Answer",
-                      "text": "Nej, SwapDeals är helt gratis att använda! Du kan lägga upp obegränsat med bytesannonser, bläddra bland alla annonser och kontakta andra användare utan någon kostnad. Vår mission är att göra hållbar byteshandel tillgänglig för alla."
+                      "text": "Nej, SwapDeals är helt att använda! Du kan lägga upp obegränsat med bytesannonser, bläddra bland alla annonser och kontakta andra användare utan någon kostnad. Vår mission är att göra hållbar byteshandel tillgänglig för alla."
                     }
                   },
                   {

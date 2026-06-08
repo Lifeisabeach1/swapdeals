@@ -3,7 +3,7 @@
 export const metadata = {
   metadataBase: new URL('https://swapdeals.se'),
   
-  title: 'SwapDeals Uppsala | Hållbarhet | Second Hand Byten',
+  title: 'SwapDeals Uppsala | Ges Bort | Second Hand Byten',
   
   description: 'Byt till dig saker som du behöver i Uppsala ✓ Kläder ✓ Elektronik ✓ Fordon ✓ Bra för mijön. Hitta annonser i Flogsta, Luthagen, Centrum & hela Uppsala. kostnadsfritt tjänst!',
   

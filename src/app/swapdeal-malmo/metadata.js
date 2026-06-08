@@ -3,7 +3,7 @@
 export const metadata = {
   metadataBase: new URL('https://swapdeals.se'),
   
-  title: 'SwapDeals Malmö | Byt Begagnat | Hållbarhet',
+  title: 'SwapDeals Malmö | Byt Eller Skänk Begagnat | Hållbarhet',
   
   description: 'Byt begagnade second hand saker i Malmö ✓ Begagnade Kläder ✓ Elektronik ✓ Möbler ✓ Miljövänlig byteshandel. Hitta bytesannonser i Möllevången, Västra Hamnen & hela Malmö. gratis tjänst',
   

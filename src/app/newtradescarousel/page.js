@@ -367,7 +367,7 @@ export default function NewTradesCarousel() {
               <article className="bg-gradient-to-br from-white/90 to-green-50/30 backdrop-blur-sm p-4 sm:p-6 lg:p-8 rounded-xl sm:rounded-2xl shadow-lg sm:shadow-xl border border-green-100/70">
                 <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-800 mb-3 sm:mb-4 flex items-center">
                   <span className="mr-2 sm:mr-3 text-xl sm:text-2xl">🔄</span>
-                  <span>Byt istället för att köpa</span>
+                  <span>Byt istället för att köpa eller skänk bort</span>
                 </h3>
                 <p className="text-sm sm:text-base lg:text-lg text-gray-700 leading-relaxed mb-4 sm:mb-6">
                   Upptäck hållbara bytesmöjligheter från användare över hela Sverige. 

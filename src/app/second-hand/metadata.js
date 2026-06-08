@@ -2,7 +2,7 @@
 
 export const metadata = {
   metadataBase: new URL('https://swapdeals.se'),
-  title: 'Second Hand - Köp Begagnat & Spara Miljön | SwapDeals 2026',
+  title: 'Second Hand | Köp Begagnat & Spara Miljön | SwapDeals 2026',
   description: 'Allt om second hand shopping - fördelar, miljöpåverkan och hur du köper smart begagnat. Lär dig varför second hand är framtidens konsumtion. ✓ Miljövänligt ✓ Ekonomiskt ✓ Hållbart',
   authors: [{ name: 'SwapDeals', url: 'https://swapdeals.se' }],
   creator: 'SwapDeals',

@@ -2,7 +2,7 @@
 
 export const metadata = {
   metadataBase: new URL('https://swapdeals.se'),
-  title: 'Hållbar Konsumtion - Varför Eco Friendly Spelar Roll | SwapDeals',
+  title: 'Hållbar Konsumtion | Eco Friendly Spelar Roll | SwapDeals',
   description: 'Lär dig varför hållbara byten spelar roll för miljön, din ekonomi och samhället. Minska avfall, spara pengar och bygg gemenskap genom smartare konsumtion. ✓ Eco Friendly ✓ Cirkulär Ekonomi ✓ Hållbart Liv',
   authors: [{ name: 'SwapDeals', url: 'https://swapdeals.se' }],
   creator: 'SwapDeals',

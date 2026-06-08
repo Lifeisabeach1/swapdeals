@@ -3,7 +3,7 @@
 export const metadata = {
   metadataBase: new URL('https://swapdeals.se'),
   title: 'SwapDeals | Bytesannonser | Second Hand Sverige',
-  description: 'Utforska bytesannonser från hela Sverige. Byt begagnade varor gratis utan mellanhand. ✓ Säkra byten ✓ Verifierade användare ✓ Gratis byteshandel',
+  description: 'Utforska bytesannonser från hela Sverige. Byt begagnade varor utan mellanhand. ✓ Säkra byten ✓ Verifierade användare ✓ Gratis byteshandel',
   authors: [{ name: 'SwapDeals', url: 'https://swapdeals.se' }],
   creator: 'SwapDeals',
   publisher: 'SwapDeals',
@@ -23,7 +23,7 @@ export const metadata = {
     url: 'https://swapdeals.se/bytesannonser',
     siteName: 'SwapDeals',
     title: 'Bytesannonser | SwapDeals Second Hand Byten',
-    description: 'Bläddra bland bytesannonser från hela Sverige. Gratis byteshandel av begagnade varor mellan privatpersoner.',
+    description: 'Bläddra bland bytesannonser från hela Sverige. Byteshandel av begagnade varor mellan privatpersoner.',
     images: [
       {
         url: '/trades-hero.webp',
@@ -198,7 +198,7 @@ export const webPageJsonLd = {
   '@id': 'https://swapdeals.se/bytesannonser#webpage',
   url: 'https://swapdeals.se/bytesannonser',
   name: 'Bytesannonser | SwapDeals',
-  description: 'Bläddra bland bytesannonser för begagnade varor från hela Sverige. Gratis byteshandel mellan privatpersoner.',
+  description: 'Bläddra bland bytesannonser för begagnade varor från hela Sverige. Byteshandel mellan privatpersoner.',
   inLanguage: 'sv-SE',
   isPartOf: {
     '@type': 'WebSite',

@@ -21,10 +21,10 @@ export const metadata = {
   
   title: {
     template: '%s | SwapDeals',
-    default: 'SwapDeals - Byt Begagnade Prylar Gratis | Hållbar Byteshandel Sverige'
+    default: 'SwapDeals - Byt Begagnade Prylar | Hållbar Byteshandel Sverige'
   },
   
-  description: 'Sveriges ledande bytesplattform ✓ Byt begagnade prylar gratis ✓ Hållbart & Miljövänligt ✓ 100% kostnadsfritt. Hitta bytesannonser nära dig!',
+  description: 'Sveriges ledande bytesplattform ✓ Byt begagnade prylar ✓ Hållbart & Miljövänligt ✓ 100% kostnadsfritt. Hitta bytesannonser nära dig!',
   
   authors: [{ name: 'SwapDeals', url: 'https://swapdeals.se' }],
   creator: 'SwapDeals',
@@ -62,8 +62,8 @@ export const metadata = {
     locale: 'sv_SE',
     url: 'https://swapdeals.se',
     siteName: 'SwapDeals',
-    title: 'SwapDeals - Byteshandel & Begagnade Prylar | Helt Gratis',
-    description: 'Byt begagnade prylar gratis på Sveriges största bytesplattform. Hållbart, miljövänligt och 100% kostnadsfritt.',
+    title: 'SwapDeals - Byteshandel & Begagnade Prylar',
+    description: 'Byt begagnade prylar på Sveriges största bytesplattform. Hållbart, miljövänligt och 100% kostnadsfritt.',
     images: [
       {
         url: '/bytaprylar.webp',
@@ -79,8 +79,8 @@ export const metadata = {
     card: 'summary_large_image',
     site: '@SwapDealsSE',
     creator: '@SwapDealsSE',
-    title: 'SwapDeals - Byt Begagnade Prylar Gratis i Sverige',
-    description: 'Sveriges ledande bytesplattform för hållbar konsumtion. Byt kläder, elektronik, möbler och mer - helt gratis!',
+    title: 'SwapDeals - Byt Begagnade Prylar i Sverige',
+    description: 'Sveriges ledande bytesplattform för hållbar konsumtion. Byt kläder, elektronik, möbler och mer!',
     images: {
       url: '/planet.webp',
       alt: 'SwapDeals - Byteshandel Sverige'

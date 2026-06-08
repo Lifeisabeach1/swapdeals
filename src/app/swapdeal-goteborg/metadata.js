@@ -3,7 +3,7 @@
 export const metadata = {
   metadataBase: new URL('https://swapdeals.se'),
   
-  title: 'SwapDeals Göteborg | Second Hand Marknad | Klimatsmart',
+  title: 'SwapDeals Göteborg | Second Hand Marknad | Skänkes',
   
   description: 'Byt second hand prylar kostnadsfritt i Göteborg ✓ Kläder ✓ Elektronik ✓ Begagnade Möbler ✓ Genomtänkt byteshandel. Hitta bytesannonser nära dig i Göteborg. 100% gratis!',
   
@@ -29,7 +29,7 @@ export const metadata = {
     url: 'https://swapdeals.se/swapdeal-goteborg',
     siteName: 'SwapDeals',
     title: 'SwapDeals Göteborg - Byteshandel & Begagnade Prylar',
-    description: 'Göteborgs största bytesplattform. Byt kläder, elektronik, möbler och mer helt gratis. Hållbart, lokalt och enkelt!',
+    description: 'Göteborgs största bytesplattform. Byt kläder, elektronik, möbler och mer. Hållbart, lokalt och enkelt!',
     images: [
       {
         url: '/bytaprylar.webp',
@@ -45,8 +45,8 @@ export const metadata = {
     card: 'summary_large_image',
     site: '@SwapDealsSE',
     creator: '@SwapDealsSE',
-    title: 'SwapDeals Göteborg - Byt Begagnade Prylar Gratis',
-    description: 'Göteborgs ledande bytesplattform. Byt kläder, elektronik, möbler och mer - helt gratis!',
+    title: 'SwapDeals Göteborg - Byt Begagnade Prylar',
+    description: 'Göteborgs ledande bytesplattform. Byt kläder, elektronik, möbler och mer!',
     images: {
       url: '/bytaprylar.webp',
       alt: 'SwapDeals Göteborg'
